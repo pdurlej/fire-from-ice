@@ -71,9 +71,13 @@ final class MenuBarSection {
         }
         if appState.activeSpace.isFullscreen {
             return NSScreen.screenWithMouse ?? NSScreen.main
-        } else {
-            return NSScreen.main
         }
+        // `NSScreen.main` is the screen holding the key window, not the screen
+        // the menu bar was clicked on. With a second display attached, that
+        // opened the Ice Bar next to some other window instead of under the
+        // icon the user just hit. The active menu bar's screen is the right
+        // reference; fall back only if the window server does not name one.
+        return NSScreen.screenWithActiveMenuBar ?? NSScreen.screenWithMouse ?? NSScreen.main
     }
 
     /// A Boolean value that indicates whether the section is hidden.
