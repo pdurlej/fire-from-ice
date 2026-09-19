@@ -22,6 +22,9 @@ final class IceBarPanel: NSPanel {
     /// Storage for internal observers.
     private var cancellables = Set<AnyCancellable>()
 
+    /// Monitors that dismiss the panel, active only while it is shown.
+    private var dismissMonitors = [EventMonitor]()
+
     /// Creates a new Ice Bar panel.
     init() {
         super.init(
@@ -168,7 +171,12 @@ final class IceBarPanel: NSPanel {
         appState.navigationState.isIceBarPresented = true
         currentSection = section
 
-        let cacheTask = Task(timeout: .seconds(1)) {
+        // One second was not enough for a cold cache: the first open after a
+        // launch has to enumerate every item and render an image for each.
+        // When the timeout cancelled that work, the bar came up empty. Do not
+        // stretch this much further either — the panel does not appear until
+        // the wait is over, and the content view now reloads on its own.
+        let cacheTask = Task(timeout: .milliseconds(1500)) {
             await appState.itemManager.cacheItemsIfNeeded()
             await appState.imageCache.updateCache()
         }
@@ -186,6 +194,13 @@ final class IceBarPanel: NSPanel {
             section: section
         )
 
+        // `updateOrigin` derives the origin from the panel's own height and
+        // width. SwiftUI lays the hosting view out on the next pass, so without
+        // forcing it here the first origin is computed from the previous
+        // content's size: the bar appears offset and then jumps into place once
+        // the frame observer catches up.
+        contentView?.layoutSubtreeIfNeeded()
+
         updateOrigin(for: screen)
 
         // Color manager must be updated after updating the panel's origin,
@@ -197,6 +212,70 @@ final class IceBarPanel: NSPanel {
         colorManager.updateAllProperties(with: frame, screen: screen)
 
         orderFrontRegardless()
+
+        startDismissMonitors()
+    }
+
+    /// Starts the monitors that dismiss the panel.
+    ///
+    /// Until these existed, the only thing that closed the Ice Bar after a
+    /// click elsewhere was the smart rehide strategy, which is off unless the
+    /// user picked it and ignores clicks on the desktop, on untitled windows
+    /// and on background apps. Every floating panel is expected to go away when
+    /// it is clicked past or escaped, so handle both here regardless of the
+    /// rehide settings.
+    private func startDismissMonitors() {
+        stopDismissMonitors()
+
+        let clickMonitor = EventMonitor.universal(
+            for: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        ) { [weak self] event in
+            guard let self, isVisible else {
+                return event
+            }
+            // Clicks inside the panel are the item clicks; they dismiss it
+            // themselves once the click has been routed to the item.
+            if event.window === self {
+                return event
+            }
+            let location = NSEvent.mouseLocation
+            if frame.contains(location) {
+                return event
+            }
+            // The menu bar owns its own clicks: the Ice icon toggles the
+            // section, and empty space is handled by the show-on-click
+            // machinery. Dismissing here would race those and reopen the bar.
+            let screen = NSScreen.screens.first { $0.frame.contains(location) } ?? NSScreen.main
+            if let screen, location.y >= screen.visibleFrame.maxY {
+                return event
+            }
+            hide()
+            return event
+        }
+
+        let keyMonitor = EventMonitor.universal(for: .keyDown) { [weak self] event in
+            guard let self, isVisible else {
+                return event
+            }
+            guard event.keyCode == 53 else { // Escape
+                return event
+            }
+            hide()
+            return nil
+        }
+
+        for monitor in [clickMonitor, keyMonitor] {
+            monitor.start()
+        }
+        dismissMonitors = [clickMonitor, keyMonitor]
+    }
+
+    /// Stops the monitors that dismiss the panel.
+    private func stopDismissMonitors() {
+        for monitor in dismissMonitors {
+            monitor.stop()
+        }
+        dismissMonitors.removeAll()
     }
 
     /// Hides the panel.
@@ -211,6 +290,7 @@ final class IceBarPanel: NSPanel {
     }
 
     override func close() {
+        stopDismissMonitors()
         super.close()
         contentView = nil
         currentSection = nil
@@ -266,6 +346,8 @@ private struct IceBarContentView: View {
     @ObservedObject var menuBarManager: MenuBarManager
     @State private var frame = CGRect.zero
     @State private var scrollIndicatorsFlashTrigger = 0
+    @State private var loadingFailed = false
+    @State private var reloadToken = 0
 
     let screen: NSScreen
     let section: MenuBarSection.Name
@@ -340,6 +422,41 @@ private struct IceBarContentView: View {
         .onFrameChange(update: $frame)
     }
 
+    /// The message shown when items could not be loaded, with a way out.
+    private var retryMessage: some View {
+        HStack(spacing: 8) {
+            Text("Menu bar items couldn't be loaded.")
+
+            Button {
+                loadingFailed = false
+                reloadToken += 1
+            } label: {
+                Text("Try Again")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.link)
+        }
+        .padding(.horizontal, 10)
+    }
+
+    /// Rebuilds the item cache until it holds something, or gives up.
+    private func loadItemsUntilAvailable() async {
+        for attempt in 1...5 {
+            guard itemManager.itemCache.managedItems.isEmpty else {
+                loadingFailed = false
+                return
+            }
+            await itemManager.cacheItemsRegardless()
+            await imageCache.updateCache()
+            guard itemManager.itemCache.managedItems.isEmpty else {
+                loadingFailed = false
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(200 * attempt))
+        }
+        loadingFailed = itemManager.itemCache.managedItems.isEmpty
+    }
+
     @ViewBuilder
     private var content: some View {
         if !ScreenCapture.cachedCheckPermissions() {
@@ -362,15 +479,25 @@ private struct IceBarContentView: View {
             Text("Ice cannot display menu bar items for automatically hidden menu bars")
                 .padding(.horizontal, 10)
         } else if itemManager.itemCache.managedItems.isEmpty {
-            HStack {
-                Text("Loading menu bar items…")
-                ProgressView()
-                    .controlSize(.small)
+            // A spinner next to "Loading menu bar items…" reads as a hang the
+            // moment it lasts longer than an instant, and this one used to last
+            // forever. Placeholders say the same thing in the shape of the bar
+            // that is coming, and the failure state offers the retry instead of
+            // leaving the user to guess.
+            Group {
+                if loadingFailed {
+                    retryMessage
+                } else {
+                    IceBarPlaceholderItems()
+                }
             }
-            .padding(.horizontal, 10)
+            // Nothing else retries: if the cache is empty when the bar opens,
+            // it stays empty unless someone asks again.
+            .task(id: reloadToken) {
+                await loadItemsUntilAvailable()
+            }
         } else if imageCache.cacheFailed(for: section) {
-            Text("Unable to display menu bar items")
-                .padding(.horizontal, 10)
+            retryMessage
         } else {
             ScrollView(.horizontal) {
                 HStack(spacing: 0) {
@@ -385,7 +512,10 @@ private struct IceBarContentView: View {
                     }
                 }
             }
-            .environment(\.isScrollEnabled, frame.width == screen.frame.width)
+            // Comparing two CGFloats for equality left scrolling disabled on a
+            // bar that had in fact been clamped to the screen width, stranding
+            // the items that did not fit. Allow for rounding.
+            .environment(\.isScrollEnabled, frame.width >= screen.frame.width - 1)
             .defaultScrollAnchor(.trailing)
             .scrollIndicatorsFlash(trigger: scrollIndicatorsFlashTrigger)
             .task {
@@ -395,12 +525,38 @@ private struct IceBarContentView: View {
     }
 }
 
+// MARK: - IceBarPlaceholderItems
+
+/// Stand-ins shown in the shape of menu bar items while the caches fill.
+private struct IceBarPlaceholderItems: View {
+    @State private var isPulsing = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<4, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(.primary.opacity(isPulsing ? 0.2 : 0.08))
+                    .frame(width: 18, height: 18)
+            }
+        }
+        .padding(.horizontal, 8)
+        .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: isPulsing)
+        .onAppear {
+            isPulsing = true
+        }
+        .accessibilityLabel("Loading menu bar items")
+    }
+}
+
 // MARK: - IceBarItemView
 
 private struct IceBarItemView: View {
     @ObservedObject var imageCache: MenuBarItemImageCache
     @ObservedObject var itemManager: MenuBarItemManager
     @ObservedObject var menuBarManager: MenuBarManager
+
+    @State private var isHovering = false
+    @State private var isPressed = false
 
     let item: MenuBarItem
     let section: MenuBarSection.Name
@@ -458,17 +614,38 @@ private struct IceBarItemView: View {
         if let image {
             Image(nsImage: image)
                 .contentShape(Rectangle())
+                .background {
+                    // The real menu bar highlights an item while it is pressed.
+                    // Without an equivalent here, a click that is still being
+                    // routed to the item looks like a click that did nothing.
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(.primary.opacity(highlightOpacity))
+                        .padding(.vertical, 2)
+                        .animation(.easeOut(duration: 0.1), value: highlightOpacity)
+                }
                 .overlay {
                     IceBarItemClickView(
                         item: item,
                         leftClickAction: leftClickAction,
-                        rightClickAction: rightClickAction
+                        rightClickAction: rightClickAction,
+                        isHovering: $isHovering,
+                        isPressed: $isPressed
                     )
                 }
                 .accessibilityLabel(item.displayName)
                 .accessibilityAction(named: "left click", leftClickAction)
                 .accessibilityAction(named: "right click", rightClickAction)
         }
+    }
+
+    private var highlightOpacity: Double {
+        if isPressed {
+            return 0.25
+        }
+        if isHovering {
+            return 0.12
+        }
+        return 0
     }
 }
 
@@ -481,20 +658,37 @@ private struct IceBarItemClickView: NSViewRepresentable {
         let leftClickAction: () -> Void
         let rightClickAction: () -> Void
 
-        private var lastLeftMouseDownDate = Date.now
-        private var lastRightMouseDownDate = Date.now
+        @Binding var isHovering: Bool
+        @Binding var isPressed: Bool
 
-        private var lastLeftMouseDownLocation = CGPoint.zero
-        private var lastRightMouseDownLocation = CGPoint.zero
+        private var trackingArea: NSTrackingArea?
+
+        // A click only counts if it started on this view. Tracking the button
+        // state explicitly keeps a stray mouse up — one whose mouse down landed
+        // on a different item, or before this view existed — from firing an
+        // action for the wrong item.
+        private var isLeftMouseDownInside = false
+        private var isRightMouseDownInside = false
+
+        private var leftMouseDownLocation = CGPoint.zero
+        private var rightMouseDownLocation = CGPoint.zero
+
+        /// The distance the pointer may travel between mouse down and mouse up
+        /// and still count as a click rather than a drag.
+        private let dragThreshold: CGFloat = 10
 
         init(
             item: MenuBarItem,
             leftClickAction: @escaping () -> Void,
-            rightClickAction: @escaping () -> Void
+            rightClickAction: @escaping () -> Void,
+            isHovering: Binding<Bool>,
+            isPressed: Binding<Bool>
         ) {
             self.item = item
             self.leftClickAction = leftClickAction
             self.rightClickAction = rightClickAction
+            self._isHovering = isHovering
+            self._isPressed = isPressed
             super.init(frame: .zero)
             self.toolTip = item.displayName
         }
@@ -504,24 +698,59 @@ private struct IceBarItemClickView: NSViewRepresentable {
             fatalError("init(coder:) has not been implemented")
         }
 
+        // The Ice Bar is a nonactivating panel, so SwiftUI's own hover tracking
+        // is unreliable while another app is active. Track it here instead, with
+        // `activeAlways`.
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            if let trackingArea {
+                removeTrackingArea(trackingArea)
+            }
+            let trackingArea = NSTrackingArea(
+                rect: .zero,
+                options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                owner: self
+            )
+            addTrackingArea(trackingArea)
+            self.trackingArea = trackingArea
+        }
+
+        override func mouseEntered(with event: NSEvent) {
+            super.mouseEntered(with: event)
+            isHovering = true
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            super.mouseExited(with: event)
+            isHovering = false
+            isPressed = false
+        }
+
         override func mouseDown(with event: NSEvent) {
             super.mouseDown(with: event)
-            lastLeftMouseDownDate = .now
-            lastLeftMouseDownLocation = NSEvent.mouseLocation
+            isLeftMouseDownInside = true
+            leftMouseDownLocation = NSEvent.mouseLocation
+            isPressed = true
         }
 
         override func rightMouseDown(with event: NSEvent) {
             super.rightMouseDown(with: event)
-            lastRightMouseDownDate = .now
-            lastRightMouseDownLocation = NSEvent.mouseLocation
+            isRightMouseDownInside = true
+            rightMouseDownLocation = NSEvent.mouseLocation
+            isPressed = true
         }
 
         override func mouseUp(with event: NSEvent) {
             super.mouseUp(with: event)
-            guard
-                Date.now.timeIntervalSince(lastLeftMouseDownDate) < 0.5,
-                lastLeftMouseDownLocation.distance(to: NSEvent.mouseLocation) < 5
-            else {
+            isPressed = false
+            guard isLeftMouseDownInside else {
+                return
+            }
+            isLeftMouseDownInside = false
+            // No time limit: a click that is held for a moment, or one that
+            // lands while the window server is busy, is still a click. Only
+            // pointer travel distinguishes a click from a drag.
+            guard leftMouseDownLocation.distance(to: NSEvent.mouseLocation) < dragThreshold else {
                 return
             }
             leftClickAction()
@@ -529,10 +758,12 @@ private struct IceBarItemClickView: NSViewRepresentable {
 
         override func rightMouseUp(with event: NSEvent) {
             super.rightMouseUp(with: event)
-            guard
-                Date.now.timeIntervalSince(lastRightMouseDownDate) < 0.5,
-                lastRightMouseDownLocation.distance(to: NSEvent.mouseLocation) < 5
-            else {
+            isPressed = false
+            guard isRightMouseDownInside else {
+                return
+            }
+            isRightMouseDownInside = false
+            guard rightMouseDownLocation.distance(to: NSEvent.mouseLocation) < dragThreshold else {
                 return
             }
             rightClickAction()
@@ -544,11 +775,16 @@ private struct IceBarItemClickView: NSViewRepresentable {
     let leftClickAction: () -> Void
     let rightClickAction: () -> Void
 
+    @Binding var isHovering: Bool
+    @Binding var isPressed: Bool
+
     func makeNSView(context: Context) -> NSView {
         Represented(
             item: item,
             leftClickAction: leftClickAction,
-            rightClickAction: rightClickAction
+            rightClickAction: rightClickAction,
+            isHovering: $isHovering,
+            isPressed: $isPressed
         )
     }
 
