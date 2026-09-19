@@ -174,8 +174,16 @@ extension HIDEventManager {
     // MARK: Handle Show On Click
 
     private func handleShowOnClick(appState: AppState, screen: NSScreen) {
+        // The Ice icon toggles its own section from `ControlItem.performAction`.
+        // `isMouseInsideMenuBarItem` is a live window-server query, and the Ice
+        // icon is exactly the item whose window is being reconfigured when this
+        // runs, so it is periodically missing from the list. When that happens,
+        // this handler treats the click as empty space and toggles a second
+        // time, which cancels the icon's own toggle and makes the click look
+        // like it did nothing. Check the icon's frame directly instead.
         guard
             appState.settings.general.showOnClick,
+            !isMouseInsideControlItem(appState: appState),
             isMouseInsideEmptyMenuBarSpace(appState: appState, screen: screen)
         else {
             return
@@ -568,6 +576,25 @@ extension HIDEventManager {
         // moves their mouse outside of the Ice Bar.
         let paddedFrame = panel.frame.insetBy(dx: -15, dy: -15)
         return paddedFrame.contains(mouseLocation)
+    }
+
+    /// A Boolean value that indicates whether the mouse pointer is within
+    /// the bounds of any of Ice's own control items.
+    ///
+    /// Unlike ``isMouseInsideMenuBarItem(appState:screen:)``, this reads the
+    /// frames Ice already tracks for its own items instead of querying the
+    /// window server, so it stays correct while those items are being
+    /// repositioned.
+    func isMouseInsideControlItem(appState: AppState) -> Bool {
+        guard let mouseLocation = MouseHelpers.locationAppKit else {
+            return false
+        }
+        return appState.menuBarManager.sections.contains { section in
+            guard let frame = section.controlItem.frame else {
+                return false
+            }
+            return frame.contains(mouseLocation)
+        }
     }
 
     /// A Boolean value that indicates whether the mouse pointer is within
