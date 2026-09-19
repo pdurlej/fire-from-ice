@@ -388,11 +388,25 @@ extension MenuBarItemManager {
                 // ???: Is clearing the cache the best thing to do here?
                 logger.warning("Missing control item for hidden section, clearing menu bar item cache")
                 itemCache = ItemCache(displayID: nil)
+                // The window IDs were recorded above, so without clearing them
+                // `cacheItemsIfNeeded` would decide nothing had changed and skip
+                // every later attempt, leaving the empty cache in place until the
+                // menu bar itself changes. That is the "Loading menu bar items…"
+                // the Ice Bar gets stuck on.
+                await cacheActor.clearCachedItemWindowIDs()
                 return
             }
 
             await enforceControlItemOrder(controlItems: controlItems)
             await uncheckedCacheItems(items: items, controlItems: controlItems, displayID: displayID)
+
+            // Callers cancel this task on a timeout (IceBar.show) and
+            // `runCacheTask` cancels it when a newer cache starts. Either way
+            // the cache may be unwritten while the window IDs say it is
+            // current; clear them so the next attempt actually runs.
+            if Task.isCancelled {
+                await cacheActor.clearCachedItemWindowIDs()
+            }
         }
     }
 
@@ -521,19 +535,37 @@ extension MenuBarItemManager {
         !MouseHelpers.isButtonPressed()
     }
 
+    /// The longest this manager waits for the user to stop moving the mouse or
+    /// holding a modifier before it posts its events anyway.
+    private static let userInputPauseTimeout = Duration.milliseconds(1000)
+
     /// Waits asynchronously for the user to pause input.
+    ///
+    /// Waiting is a courtesy: posting synthetic events into a stream of real
+    /// ones makes moves and clicks land in the wrong place. But the wait used
+    /// to be unbounded, and `hasUserPausedInput` also requires every modifier
+    /// to be released, so a held key or a hand resting on the trackpad stalled
+    /// the click for as long as it lasted — from the user's side, clicking an
+    /// item in the Ice Bar simply did nothing. Give up after
+    /// ``userInputPauseTimeout`` and post the events regardless.
     private nonisolated func waitForUserToPauseInput() async throws {
         let waitTask = Task {
+            let deadline = ContinuousClock.now + Self.userInputPauseTimeout
             while true {
                 try Task.checkCancellation()
                 if hasUserPausedInput(for: .milliseconds(50)) {
-                    break
+                    return true
                 }
-                try await Task.sleep(for: .milliseconds(250))
+                if ContinuousClock.now >= deadline {
+                    return false
+                }
+                try await Task.sleep(for: .milliseconds(50))
             }
         }
         do {
-            try await waitTask.value
+            if try await waitTask.value == false {
+                logger.debug("User input did not pause within the timeout, continuing anyway")
+            }
         } catch {
             throw EventError.cannotComplete
         }
