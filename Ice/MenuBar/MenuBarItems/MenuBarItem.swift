@@ -4,6 +4,7 @@
 //
 
 import Cocoa
+import OSLog
 import os.lock
 
 /// A structural representation of a menu bar item.
@@ -229,7 +230,8 @@ extension MenuBarItem {
             bridgingOption.insert(.activeSpace)
         }
 
-        return Bridging.getMenuBarWindowList(option: bridgingOption)
+        let windowIDs = Bridging.getMenuBarWindowList(option: bridgingOption)
+        let windows: [WindowInfo] = windowIDs
             .reversed().compactMap { windowID in
                 guard
                     displayBoundsPredicate(windowID),
@@ -239,6 +241,8 @@ extension MenuBarItem {
                 }
                 return window
             }
+        Logger(category: "MenuBarDiscovery").debug("[FireDiscovery25] stage=materialize ids=\(windowIDs.count) windows=\(windows.count) displayFilter=\(display != nil) missingTitles=\(windows.filter { $0.title?.isEmpty != false }.count)")
+        return windows
     }
 
     /// Creates and returns a list of menu bar items using experimental

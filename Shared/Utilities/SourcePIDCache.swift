@@ -127,29 +127,56 @@ final class SourcePIDCache {
 
         /// Updates the cached process identifier for the given window.
         mutating func updatePID(for window: WindowInfo) {
-            guard
-                AXHelpers.isProcessTrusted(),
-                let windowBounds = stableBounds(for: window)
-            else {
+            let started = ProcessInfo.processInfo.systemUptime
+            guard AXHelpers.isProcessTrusted() else {
+                Logger.default.debug("[FireDiscovery25] stage=ax-match window=\(window.windowID) result=untrusted")
+                return
+            }
+            guard let windowBounds = stableBounds(for: window) else {
+                Logger.default.debug("[FireDiscovery25] stage=ax-match window=\(window.windowID) result=unstable-or-missing-bounds")
                 return
             }
 
             partitionApps()
+            let appCount = apps.count
+            var bars = 0
+            var children = 0
+            var enabled = 0
+            var frames = 0
+            var nearestDistance = CGFloat.infinity
+            var nearestDelta = CGPoint.zero
+            var matched = false
+            defer {
+                // Numeric geometry only; never log titles, app names, or AX text.
+                let distance = nearestDistance.isFinite ? Double(nearestDistance) : -1
+                Logger.default.debug("[FireDiscovery25] stage=ax-match window=\(window.windowID) matched=\(matched) apps=\(appCount) bars=\(bars) children=\(children) enabled=\(enabled) frames=\(frames) nearestDistance=\(distance) deltaX=\(Double(nearestDelta.x)) deltaY=\(Double(nearestDelta.y)) elapsedMS=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1_000))")
+            }
 
             for app in apps {
                 guard let bar = app.getOrCreateExtrasMenuBar() else {
                     continue
                 }
+                bars += 1
                 for child in AXHelpers.children(for: bar) {
+                    children += 1
                     guard AXHelpers.isEnabled(child) else {
                         continue
                     }
-                    guard
-                        let childFrame = AXHelpers.frame(for: child),
-                        childFrame.center.distance(to: windowBounds.center) <= 1
-                    else {
+                    enabled += 1
+                    guard let childFrame = AXHelpers.frame(for: child) else {
                         continue
                     }
+                    frames += 1
+                    let distance = childFrame.center.distance(to: windowBounds.center)
+                    if distance < nearestDistance {
+                        nearestDistance = distance
+                        nearestDelta = CGPoint(
+                            x: childFrame.midX - windowBounds.midX,
+                            y: childFrame.midY - windowBounds.midY
+                        )
+                    }
+                    guard distance <= 1 else { continue }
+                    matched = true
                     pids[window.windowID] = app.processIdentifier
                     return
                 }
@@ -221,6 +248,7 @@ final class SourcePIDCache {
     func pid(for window: WindowInfo) -> pid_t? {
         state.withLock { state in
             if let pid = state.pids[window.windowID] {
+                Logger.default.debug("[FireDiscovery25] stage=ax-match window=\(window.windowID) result=cache-hit")
                 return pid
             }
             state.updatePID(for: window)
