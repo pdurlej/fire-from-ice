@@ -343,11 +343,13 @@ extension Bridging {
 
     private static func getProcessMenuBarWindowList() -> [CGWindowID] {
         guard var count = getWindowCount() else {
+            logger.debug("[FireDiscovery25] stage=window-list-error api=window-count")
             return []
         }
         var list = [CGWindowID](repeating: 0, count: Int(count))
         let result = CGSGetProcessMenuBarWindowList(getMainConnection(), nullConnection, count, &list, &count)
         guard result == .success else {
+            logger.debug("[FireDiscovery25] stage=window-list-error api=process-menu-bar code=\(result.rawValue)")
             logger.error("CGSGetProcessMenuBarWindowList failed with error \(result.logString, privacy: .public)")
             return []
         }
@@ -407,32 +409,45 @@ extension Bridging {
     ///   Pass an empty option set to return all available windows.
     static func getMenuBarWindowList(option: MenuBarWindowListOption = []) -> [CGWindowID] {
         var predicates = [(CGWindowID) -> Bool]()
+        var offScreen = 0
+        var otherSpace = 0
+        var menuLevel = 0
 
         if option.contains(.onScreen) {
             let onScreenList = Set(getOnScreenWindowList())
             predicates.append { windowID in
-                onScreenList.contains(windowID)
+                let included = onScreenList.contains(windowID)
+                if !included { offScreen += 1 }
+                return included
             }
         }
 
         if option.contains(.activeSpace) {
             let activeSpaceID = getActiveSpaceID()
             predicates.append { windowID in
-                isWindowOnSpace(windowID, activeSpaceID)
+                let included = isWindowOnSpace(windowID, activeSpaceID)
+                if !included { otherSpace += 1 }
+                return included
             }
         }
 
         if option.contains(.itemsOnly) {
             predicates.append { windowID in
-                getWindowLevel(for: windowID) != kCGMainMenuWindowLevel
+                let included = getWindowLevel(for: windowID) != kCGMainMenuWindowLevel
+                if !included { menuLevel += 1 }
+                return included
             }
         }
 
-        return getProcessMenuBarWindowList().filter { windowID in
+        let raw = getProcessMenuBarWindowList()
+        let selected = raw.filter { windowID in
             predicates.allSatisfy { predicate in
                 predicate(windowID)
             }
         }
+        // Counts follow the existing short-circuit order; no extra WS queries.
+        logger.debug("[FireDiscovery25] stage=window-list option=\(option.rawValue) raw=\(raw.count) selected=\(selected.count) offScreen=\(offScreen) otherSpace=\(otherSpace) menuLevel=\(menuLevel)")
+        return selected
     }
 
     // MARK: - CGWindowList Helpers

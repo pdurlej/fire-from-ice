@@ -58,15 +58,20 @@ extension MenuBarItemService {
 
         /// Returns the source process identifier for the given window.
         func sourcePID(for window: WindowInfo) async -> pid_t? {
-            await withCheckedContinuation { continuation in
+            let started = ProcessInfo.processInfo.systemUptime
+            logger.debug("[FireDiscovery25] stage=xpc-begin window=\(window.windowID)")
+            return await withCheckedContinuation { continuation in
                 guard let response = session.send(request: .sourcePID(window)) else {
+                    logger.debug("[FireDiscovery25] stage=xpc-end window=\(window.windowID) result=transport-failure elapsedMS=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1_000))")
                     logger.error("Source PID request returned nil")
                     continuation.resume(returning: nil)
                     return
                 }
                 if case .sourcePID(let pid) = response {
+                    logger.debug("[FireDiscovery25] stage=xpc-end window=\(window.windowID) result=reply resolved=\(pid != nil) elapsedMS=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1_000))")
                     continuation.resume(returning: pid)
                 } else {
+                    logger.debug("[FireDiscovery25] stage=xpc-end window=\(window.windowID) result=invalid-response")
                     logger.error("Source PID request returned invalid response \(String(describing: response))")
                     continuation.resume(returning: nil)
                 }

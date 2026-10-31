@@ -378,13 +378,24 @@ extension MenuBarItemManager {
                 return
             }
 
+            let attempt = UUID().uuidString
+            let started = ProcessInfo.processInfo.systemUptime
+            logger.debug("[FireDiscovery25] stage=cache-begin attempt=\(attempt, privacy: .public)")
+            defer {
+                logger.debug("[FireDiscovery25] stage=cache-end attempt=\(attempt, privacy: .public) managed=\(itemCache.managedItems.count) cancelled=\(Task.isCancelled) elapsedMS=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1_000))")
+            }
             let displayID = Bridging.getActiveMenuBarDisplayID()
             var items = await MenuBarItem.getMenuBarItems(option: .activeSpace)
+            let hiddenTitles = items.filter { $0.title == ControlItem.Identifier.hidden.rawValue }.count
+            let hiddenTags = items.filter { $0.tag == .hiddenControlItem }.count
+            let ownSourceItems = items.filter { $0.sourcePID == ProcessInfo.processInfo.processIdentifier }.count
+            logger.debug("[FireDiscovery25] stage=discovery attempt=\(attempt, privacy: .public) items=\(items.count) unresolvedSources=\(items.filter { $0.sourcePID == nil }.count) missingTitles=\(items.filter { $0.title?.isEmpty != false }.count) ownSourceItems=\(ownSourceItems) hiddenTitles=\(hiddenTitles) hiddenTags=\(hiddenTags)")
 
             let itemWindowIDs = currentItemWindowIDs ?? items.reversed().map { $0.windowID }
             await cacheActor.updateCachedItemWindowIDs(itemWindowIDs)
 
             guard let controlItems = ControlItemPair(items: &items) else {
+                logger.debug("[FireDiscovery25] stage=cache-rejected attempt=\(attempt, privacy: .public) reason=missing-hidden-control")
                 // ???: Is clearing the cache the best thing to do here?
                 logger.warning("Missing control item for hidden section, clearing menu bar item cache")
                 itemCache = ItemCache(displayID: nil)
@@ -396,8 +407,8 @@ extension MenuBarItemManager {
         }
     }
 
-    /// Caches the current menu bar items, if the items have changed
-    /// since the previous cache.
+    /// Caches the current menu bar items if the windows have changed or
+    /// the previous discovery left the item cache empty.
     ///
     /// Before caching, this method ensures that the control items for
     /// the hidden and always-hidden sections are correctly ordered,
@@ -411,11 +422,19 @@ extension MenuBarItemManager {
         // seconds, which is exactly the click-to-reveal freeze users hit
         // (IceBar.show → cacheItemsIfNeeded). The query is a pure read whose
         // result is just an array of window IDs, so compute it off the main
-        // actor; the cache comparison below is unchanged.
+        // actor; a failed/empty cache must still retry with unchanged IDs.
         let itemWindowIDs = await Task.detached(priority: .userInitiated) {
             Bridging.getMenuBarWindowList(option: [.itemsOnly, .activeSpace])
         }.value
-        if await cacheActor.cachedItemWindowIDs != itemWindowIDs {
+        let cachedWindowIDs = await cacheActor.cachedItemWindowIDs
+        let managedItemCount = itemCache.managedItems.count
+        let shouldRefresh = MenuBarItemCachePolicy.shouldRefresh(
+            cachedWindowIDs: cachedWindowIDs,
+            currentWindowIDs: itemWindowIDs,
+            hasManagedItems: managedItemCount > 0
+        )
+        logger.debug("[FireDiscovery25] stage=cache-check changed=\(cachedWindowIDs != itemWindowIDs) managed=\(managedItemCount) retry=\(shouldRefresh)")
+        if shouldRefresh {
             await cacheItemsRegardless(itemWindowIDs)
         }
     }
