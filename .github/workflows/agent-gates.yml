@@ -3,11 +3,15 @@ name: Agent gates
 # Mechanical half of docs/agent-gates.md. Builds, tests and lint run in
 # verify.yml and lint.yml; this workflow checks what those can't: protected
 # paths, issue scope, evidence in the PR body, and the owner's manual QA.
-# The PR body is untrusted input: it is only ever parsed by
-# scripts/agent_gates.py, never interpolated into a shell command.
+#
+# pull_request_target on purpose: the workflow and scripts/agent_gates.py
+# always come from the base branch, so a PR can't rewrite the checks that
+# judge it. The PR's code is NEVER checked out or run here; the checker reads
+# the diff, file contents and CI runs through the GitHub API with a read-only
+# token. The PR body is untrusted input and only ever parsed by the script.
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, edited, synchronize, reopened, labeled, unlabeled]
 
 concurrency:
@@ -27,10 +31,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # Base branch only (the default ref for pull_request_target).
       # SHA-pinned (tag kept as a trailing comment), same as the other workflows.
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
-          fetch-depth: 0
           persist-credentials: false
       - run: python3 scripts/agent_gates.py safety
         env:
@@ -39,6 +43,7 @@ jobs:
   evidence:
     name: "Gates: evidence in PR body"
     permissions:
+      actions: read
       contents: read
       issues: read
       pull-requests: read

@@ -44,6 +44,12 @@ The exact commands for G1–G3 are in `AGENTS.md` under "Commands (exact)". Run
 them as written there. SwiftLint locally: `swiftlint lint --strict` from the
 repo root.
 
+The `Agent gates` workflow runs on `pull_request_target`: the workflow and
+`scripts/agent_gates.py` always come from `fire/main`, never from the PR, and
+the PR's code is never checked out or run by it. Changing the gates therefore
+only takes effect after the change is merged, and a PR can't relax the checks
+that judge it.
+
 ### G6: scope
 
 The issue lists **Allowed paths**, one glob per line: `**` crosses directories,
@@ -79,7 +85,8 @@ for it as a way around a failing gate.
 ### G8: don't weaken a gate to pass it
 
 No new `// swiftlint:disable`, no `XCTSkip`, no `.disabled(...)` tests, no
-deleted or commented-out assertions. A failing test means the code is wrong or
+deleted or commented-out assertions. (`.disabled(...)` is only flagged in test
+files, since it's also a normal SwiftUI modifier.) A failing test means the code is wrong or
 the test is out of date, and the PR must say which and why.
 
 ### G9: evidence
@@ -98,8 +105,12 @@ include its success line:
 
 If you can't run a command (for example, you run on Linux without Xcode), write
 "not run locally" and link the green CI run of this PR
-(`https://github.com/pdurlej/fire-from-ice/actions/runs/…`). Never paste output
-you didn't get, and never claim a gate passed when you didn't see it pass.
+(`https://github.com/pdurlej/fire-from-ice/actions/runs/…`). CI checks the
+link: it must be a successful run of the right workflow (`Verify macOS` for
+G1–G4, `Lint Swift Files` for G5) on the PR's current head commit. If the PR
+changes no Swift files, `lint.yml` doesn't run; write "N/A: no Swift files
+changed" under G5 and CI verifies that. Never paste output you didn't get, and
+never claim a gate passed when you didn't see it pass.
 
 ## Manual QA (G10)
 
@@ -108,7 +119,8 @@ The issue picks one of three levels:
 - **none**: no runtime change (docs, tests, pure FireLogic, CI). G10 passes on its own.
 - **smoke**: the owner runs the smoke checklist below.
 - **smoke + issue rows**: the smoke checklist plus the rows `Q1`, `Q2`, … from the
-  issue. A task brief can supply its own table, such as the 12 rows in
+  issue's "Issue QA rows". Every Q row listed in the issue must be in the PR
+  table. A task brief can supply its own table, such as the 12 rows in
   `docs/spikes/MACOS27-HIDING-SPIKE.md`; they go in as `Q` rows.
 
 The agent copies the table into the PR and leaves every result as `pending`.

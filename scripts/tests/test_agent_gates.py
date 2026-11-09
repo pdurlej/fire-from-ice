@@ -115,10 +115,10 @@ class ScopeTests(unittest.TestCase):
 
 
 class ProtectedTests(unittest.TestCase):
-    def check(self, files, diff="", base=None, head=None, bootstrap=False):
+    def check(self, files, diff="", base=None, head=None):
         lines = gates.parse_unified_diff(diff)
         files_at = {"base": base or {}, "head": head or {}}
-        return gates.check_protected(files, lines, lambda rev, path: files_at[rev].get(path), bootstrap)
+        return gates.check_protected(files, lines, lambda rev, path: files_at[rev].get(path))
 
     def test_release_and_signing_files(self):
         errors = self.check([
@@ -131,11 +131,15 @@ class ProtectedTests(unittest.TestCase):
         ])
         self.assertEqual(len(errors), 5)
 
-    def test_gate_files_protected_except_bootstrap(self):
+    def test_gate_files_are_protected(self):
         self.assertTrue(self.check(["scripts/agent_gates.py"]))
-        self.assertFalse(self.check(["scripts/agent_gates.py"], bootstrap=True))
-        self.assertFalse(self.check([".github/workflows/agent-gates.yml"], bootstrap=True))
-        self.assertTrue(self.check([".github/workflows/verify.yml"], bootstrap=True))
+        self.assertTrue(self.check(["docs/agent-gates.md"]))
+        self.assertTrue(self.check([".github/workflows/agent-gates.yml"]))
+
+    def test_api_patch_lines(self):
+        patch = "@@ -1,2 +1,2 @@\n context\n-old\n+new"
+        self.assertEqual(gates.patch_lines(patch), ["-old", "+new"])
+        self.assertEqual(gates.patch_lines(None), [])
 
     def test_pbxproj_version_bump(self):
         diff = (
@@ -173,14 +177,37 @@ class WeakeningTests(unittest.TestCase):
         errors = gates.check_weakening(gates.parse_unified_diff(diff))
         self.assertEqual(len(errors), 2)
 
+    def test_swiftui_disabled_modifier_is_fine_outside_tests(self):
+        lines = {
+            "Ice/Settings/GeneralSettingsPane.swift": ["+            .disabled(!isEnabled)"],
+            "FireLogic/Tests/FireLogicTests/T.swift": ["+    @Test(.disabled(\"flaky\")) func a() {}"],
+        }
+        errors = gates.check_weakening(lines)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("FireLogic/Tests", errors[0])
+
 
 class EvidenceTests(unittest.TestCase):
     def test_full_evidence_passes(self):
         self.assertEqual(gates.check_evidence(evidence_body(), REPO), [])
 
-    def test_ci_link_is_accepted(self):
+    def test_ci_link_is_verified(self):
         body = evidence_body(G1=f"Not run locally (Linux). CI: https://github.com/{REPO}/actions/runs/123")
-        self.assertEqual(gates.check_evidence(body, REPO), [])
+        seen = []
+
+        def green(run_id, workflow):
+            seen.append((run_id, workflow))
+            return None
+
+        self.assertEqual(gates.check_evidence(body, REPO, green), [])
+        self.assertEqual(seen, [(123, "Verify macOS")])
+        errors = gates.check_evidence(body, REPO, lambda run_id, workflow: "CI run 123 is `failure`, not green.")
+        self.assertEqual(errors, ["G1: CI run 123 is `failure`, not green."])
+
+    def test_lint_na_only_without_swift_changes(self):
+        body = evidence_body(G5="N/A: no Swift files changed")
+        self.assertEqual(gates.check_evidence(body, REPO, swift_changed=False), [])
+        self.assertEqual(len(gates.check_evidence(body, REPO, swift_changed=True)), 1)
 
     def test_failed_or_placeholder_output_fails(self):
         body = evidence_body(G3="```\nExecuted 42 tests, with 1 failure\n```", G5="```\n<paste the tail>\n```")
@@ -213,6 +240,13 @@ class OwnerQATests(unittest.TestCase):
         errors = gates.check_owner_qa(qa_body(ALL_SMOKE_PASS, tested="fedcba9"), "smoke", HEAD)
         self.assertEqual(len(errors), 1)
         self.assertIn("Re-run QA", errors[0])
+
+    def test_every_issue_row_is_required(self):
+        issue = "### Issue QA rows\n\n| Q1 | a | b |\n| Q2 | c | d |\n| Q3 | e | f |\n"
+        self.assertEqual(gates.issue_qa_rows(issue), ["Q1", "Q2", "Q3"])
+        rows = dict(ALL_SMOKE_PASS, Q1="PASS")
+        errors = gates.check_owner_qa(qa_body(rows), "issue", HEAD, gates.issue_qa_rows(issue))
+        self.assertEqual(errors, ["Manual QA: issue row Q2 is missing.", "Manual QA: issue row Q3 is missing."])
 
     def test_issue_rows_required(self):
         self.assertEqual(len(gates.check_owner_qa(qa_body(ALL_SMOKE_PASS), "issue", HEAD)), 1)

@@ -11,6 +11,11 @@ Three subcommands, one per CI job in .github/workflows/agent-gates.yml:
   qa        Agent PRs: the owner's manual QA table is filled in, all PASS,
             for the exact head commit.
 
+The workflow runs on `pull_request_target`, so this file always comes from the
+base branch and a PR can't rewrite the checks that judge it. The PR's code is
+never checked out or executed: the diff, file contents and runs are read
+through the GitHub API.
+
 An "agent PR" is a PR whose body says `Closes #N` (or Fixes/Resolves) for an
 issue labelled `agent-task` or written from the agent-task template.
 
@@ -26,6 +31,7 @@ import os
 import plistlib
 import re
 import subprocess
+import urllib.parse
 import sys
 from dataclasses import dataclass, field
 from typing import Callable, Iterable, Optional
@@ -48,8 +54,7 @@ PROTECTED_FILES: list[tuple[str, str]] = [
     (r"^\.swiftlint\.yml$", "lint configuration"),
 ]
 
-# Files that implement the gates. They are protected like the rest, except on
-# the bootstrap PR that introduces them (the base branch has no gate script).
+# Files that implement the gates.
 GATE_FILES: list[str] = [
     ".github/workflows/agent-gates.yml",
     "scripts/agent_gates.py",
@@ -68,12 +73,18 @@ PBXPROJ_PROTECTED = re.compile(
 INFO_PLIST_PROTECTED_KEYS = ("SUFeedURL", "SUPublicEDKey", "CFBundleIdentifier")
 
 # Added lines that weaken a gate instead of passing it (agent PRs only).
-WEAKENING_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"swiftlint:disable"), "new `swiftlint:disable`"),
-    (re.compile(r"\bXCTSkip\b"), "skipped test (`XCTSkip`)"),
-    (re.compile(r"\.disabled\s*\("), "disabled test (`.disabled(...)`)"),
-    (re.compile(r"\bfunc\s+DISABLED_|\bfunc\s+xtest"), "disabled test function"),
+# (pattern, label, only in test files). `.disabled(` is also a SwiftUI
+# modifier, so it only counts inside tests.
+WEAKENING_PATTERNS: list[tuple[re.Pattern[str], str, bool]] = [
+    (re.compile(r"swiftlint:disable"), "new `swiftlint:disable`", False),
+    (re.compile(r"\bXCTSkip\b"), "skipped test (`XCTSkip`)", False),
+    (re.compile(r"\.disabled\s*\("), "disabled test (`.disabled(...)`)", True),
+    (re.compile(r"\bfunc\s+DISABLED_|\bfunc\s+xtest"), "disabled test function", True),
 ]
+
+
+def is_test_path(path: str) -> bool:
+    return bool(re.search(r"(^|/)(Tests|tests)/", path))
 
 
 @dataclass
@@ -86,9 +97,9 @@ class Result:
         return not self.errors
 
 
-def protected_file_reason(path: str, bootstrap: bool) -> Optional[str]:
+def protected_file_reason(path: str) -> Optional[str]:
     if path in GATE_FILES:
-        return None if bootstrap else "quality-gate implementation"
+        return "quality-gate implementation"
     for pattern, reason in PROTECTED_FILES:
         if re.search(pattern, path):
             return reason
@@ -114,16 +125,21 @@ def parse_unified_diff(diff: str) -> dict[str, list[str]]:
     return changes
 
 
+def patch_lines(patch: Optional[str]) -> list[str]:
+    """Changed lines of one file's patch as the GitHub API returns it."""
+    return [l for l in (patch or "").splitlines() if l[:1] in ("+", "-")]
+
+
 def check_protected(
     changed_files: Iterable[str],
     diff_lines: dict[str, list[str]],
     read_at: Callable[[str, str], Optional[bytes]],
-    bootstrap: bool,
 ) -> list[str]:
-    """read_at(rev, path) returns file bytes at 'base' or 'head', or None."""
+    """read_at(rev, path) returns file bytes at 'base' (the merge base) or
+    'head', or None."""
     errors = []
     for path in sorted(set(changed_files)):
-        reason = protected_file_reason(path, bootstrap)
+        reason = protected_file_reason(path)
         if reason:
             errors.append(f"`{path}` is protected ({reason}).")
             continue
@@ -157,7 +173,9 @@ def check_weakening(diff_lines: dict[str, list[str]]) -> list[str]:
         for line in lines:
             if not line.startswith("+"):
                 continue
-            for pattern, label in WEAKENING_PATTERNS:
+            for pattern, label, tests_only in WEAKENING_PATTERNS:
+                if tests_only and not is_test_path(path):
+                    continue
                 if pattern.search(line):
                     errors.append(f"`{path}` adds a {label}: `{line[1:].strip()[:120]}`")
     return errors
@@ -238,6 +256,12 @@ def qa_level(issue_body: str) -> str:
     return "smoke"
 
 
+def issue_qa_rows(issue_body: str) -> list[str]:
+    """Row ids (Q1, Q2, ...) the issue lists under `### Issue QA rows`."""
+    section = markdown_sections(issue_body, 3).get("issue qa rows", "")
+    return list(dict.fromkeys(re.findall(r"^\s*\|\s*(Q\d+)\s*\|", section, re.MULTILINE | re.IGNORECASE)))
+
+
 def glob_to_regex(pattern: str) -> re.Pattern[str]:
     """`**` crosses directories, `*` and `?` don't. A trailing `/` means the
     whole directory."""
@@ -289,9 +313,22 @@ GATES: list[tuple[str, str, re.Pattern[str]]] = [
 ]
 
 
-def check_evidence(pr_body: str, repo: str) -> list[str]:
+# The CI workflow whose green run may stand in for local output.
+GATE_WORKFLOWS = {"G1": "Verify macOS", "G2": "Verify macOS", "G3": "Verify macOS",
+                  "G4": "Verify macOS", "G5": "Lint Swift Files"}
+NO_SWIFT_RE = re.compile(r"\bno swift (?:files? )?chang", re.IGNORECASE)
+
+
+def check_evidence(
+    pr_body: str,
+    repo: str,
+    check_run: Optional[Callable[[int, str], Optional[str]]] = None,
+    swift_changed: bool = True,
+) -> list[str]:
+    """check_run(run_id, workflow_name) returns an error, or None when that run
+    is a green run of that workflow on the PR's head commit."""
     sections = markdown_sections(pr_body, 3)
-    run_url = re.compile(rf"https://github\.com/{re.escape(repo)}/actions/runs/\d+")
+    run_url = re.compile(rf"https://github\.com/{re.escape(repo)}/actions/runs/(\d+)")
     errors = []
     for gate_id, name, marker in GATES:
         key = next((k for k in sections if re.match(rf"{gate_id.lower()}\b", k)), None)
@@ -301,11 +338,21 @@ def check_evidence(pr_body: str, repo: str) -> list[str]:
         content = sections[key]
         if "<paste" in content.lower():
             errors.append(f"{gate_id}: still contains the template placeholder.")
-        elif not (marker.search(content) or run_url.search(content)):
+            continue
+        if marker.search(content):
+            continue
+        if gate_id == "G5" and not swift_changed and NO_SWIFT_RE.search(content):
+            continue
+        runs = [int(m) for m in run_url.findall(content)]
+        if not runs:
             errors.append(
                 f"{gate_id}: no passing output (expected `{marker.pattern}`) "
                 f"and no link to a CI run of {repo}."
             )
+            continue
+        run_errors = [check_run(r, GATE_WORKFLOWS[gate_id]) for r in runs] if check_run else []
+        if run_errors and all(run_errors):
+            errors.append(f"{gate_id}: {run_errors[0]}")
     return errors
 
 
@@ -326,7 +373,7 @@ def parse_qa_table(section: str) -> dict[str, str]:
     return rows
 
 
-def check_owner_qa(pr_body: str, level: str, head_sha: str) -> list[str]:
+def check_owner_qa(pr_body: str, level: str, head_sha: str, issue_rows: Iterable[str] = ()) -> list[str]:
     if level == "none":
         return []
     section = markdown_sections(pr_body, 2).get("manual qa", "")
@@ -348,8 +395,13 @@ def check_owner_qa(pr_body: str, level: str, head_sha: str) -> list[str]:
     for row in required:
         if row not in rows:
             errors.append(f"Manual QA: smoke row {row} is missing.")
-    if level == "issue" and not any(re.fullmatch(r"Q\d+", r) for r in rows):
-        errors.append("Manual QA: the issue asks for issue-specific rows (Q1, Q2, ...), none found.")
+    issue_rows = [r.upper() for r in issue_rows]
+    if level == "issue":
+        for row in issue_rows:
+            if row not in rows:
+                errors.append(f"Manual QA: issue row {row} is missing.")
+        if not issue_rows and not any(re.fullmatch(r"Q\d+", r) for r in rows):
+            errors.append("Manual QA: the issue asks for issue-specific rows (Q1, Q2, ...), none found.")
     for row, result in rows.items():
         if result.startswith("FAIL"):
             errors.append(f"Manual QA: {row} failed.")
@@ -363,15 +415,6 @@ def check_owner_qa(pr_body: str, level: str, head_sha: str) -> list[str]:
 # --------------------------------------------------------------------------
 
 
-def _git(*args: str) -> str:
-    return subprocess.run(["git", *args], check=True, capture_output=True, text=True).stdout
-
-
-def _git_bytes(rev: str, path: str) -> Optional[bytes]:
-    proc = subprocess.run(["git", "show", f"{rev}:{path}"], capture_output=True)
-    return proc.stdout if proc.returncode == 0 else None
-
-
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 REPO_RE = re.compile(r"^[\w.-]+/[\w.-]+$")
 
@@ -382,13 +425,59 @@ def _require(pattern: re.Pattern[str], value: str, what: str) -> str:
     return value
 
 
-def _issue(repo: str, number: int) -> dict:
-    """Read an issue with the gh CLI (preinstalled on GitHub runners, uses GH_TOKEN)."""
-    proc = subprocess.run(
-        ["gh", "api", f"repos/{repo}/issues/{int(number)}"],
-        check=True, capture_output=True, text=True, timeout=60,
-    )
+def _gh(path: str, raw: bool = False) -> subprocess.CompletedProcess:
+    """GET a REST path with the gh CLI (preinstalled on GitHub runners, uses GH_TOKEN)."""
+    args = ["gh", "api"]
+    if raw:
+        args += ["-H", "Accept: application/vnd.github.raw"]
+    return subprocess.run([*args, path], capture_output=True, timeout=60)
+
+
+def _gh_json(path: str) -> dict:
+    proc = _gh(path)
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.decode(errors="replace").strip() or f"gh api {path} failed")
     return json.loads(proc.stdout)
+
+
+def _issue(repo: str, number: int) -> dict:
+    return _gh_json(f"repos/{repo}/issues/{int(number)}")
+
+
+def _content(repo: str, sha: str, path: str) -> Optional[bytes]:
+    proc = _gh(f"repos/{repo}/contents/{urllib.parse.quote(path)}?ref={sha}", raw=True)
+    return proc.stdout if proc.returncode == 0 else None
+
+
+def _compare(repo: str, base: str, head: str) -> tuple[str, list[dict]]:
+    """(merge base sha, changed files with patches) for the PR's three-dot diff."""
+    data = _gh_json(f"repos/{repo}/compare/{base}...{head}")
+    return data["merge_base_commit"]["sha"], data.get("files", [])
+
+
+def _changed_paths(files: list[dict]) -> list[str]:
+    paths = []
+    for entry in files:
+        paths.append(entry["filename"])
+        if entry.get("previous_filename"):
+            paths.append(entry["previous_filename"])
+    return paths
+
+
+def _run_checker(repo: str, head: str) -> Callable[[int, str], Optional[str]]:
+    def check(run_id: int, workflow: str) -> Optional[str]:
+        try:
+            data = _gh_json(f"repos/{repo}/actions/runs/{int(run_id)}")
+        except Exception as error:  # noqa: BLE001
+            return f"CI run {run_id} could not be read ({error})."
+        if data.get("name") != workflow:
+            return f"CI run {run_id} is `{data.get('name')}`, expected `{workflow}`."
+        if data.get("head_sha") != head:
+            return f"CI run {run_id} is for commit {str(data.get('head_sha'))[:12]}, not the PR head {head[:12]}."
+        if data.get("conclusion") != "success":
+            return f"CI run {run_id} is `{data.get('conclusion') or data.get('status')}`, not green."
+        return None
+    return check
 
 
 def find_agent_issue(repo: str, pr_body: str, result: Result) -> Optional[dict]:
@@ -426,16 +515,20 @@ def run(command: str) -> Result:
             "No linked agent-task issue: treated as an owner PR (only protected paths are checked)."
         )
 
+    base = _require(SHA_RE, pr["base"]["sha"], "base sha")
+    head = _require(SHA_RE, pr["head"]["sha"], "head sha")
+
     if command == "safety":
-        base = _require(SHA_RE, pr["base"]["sha"], "base sha")
-        head = _require(SHA_RE, pr["head"]["sha"], "head sha")
-        changed = [p for p in _git("diff", "--name-only", "--no-renames", f"{base}...{head}").splitlines() if p]
-        diff_lines = parse_unified_diff(_git("diff", "-U0", "--no-renames", f"{base}...{head}"))
-        bootstrap = _git_bytes(base, "scripts/agent_gates.py") is None
-        if bootstrap:
-            result.notes.append("Bootstrap: the base branch has no gate script yet, gate files are not protected.")
-        violations = check_protected(
-            changed, diff_lines, lambda rev, path: _git_bytes(base if rev == "base" else head, path), bootstrap
+        merge_base, files = _compare(repo, base, head)
+        changed = _changed_paths(files)
+        diff_lines = {entry["filename"]: patch_lines(entry.get("patch")) for entry in files}
+        violations = []
+        if len(files) >= 300:
+            violations.append("The PR changes 300 or more files, too many to inspect. Split it.")
+        if PBXPROJ in diff_lines and not diff_lines[PBXPROJ]:
+            violations.append(f"`{PBXPROJ}` changed but its diff is too large to inspect.")
+        violations += check_protected(
+            changed, diff_lines, lambda rev, path: _content(repo, merge_base if rev == "base" else head, path)
         )
         if issue:
             violations += check_scope(changed, allowed_paths(issue.get("body") or ""))
@@ -447,12 +540,15 @@ def run(command: str) -> Result:
             result.errors += violations
     elif command == "evidence":
         if issue:
-            result.errors += check_evidence(body, repo)
+            _, files = _compare(repo, base, head)
+            swift_changed = any(p.endswith(".swift") for p in _changed_paths(files))
+            result.errors += check_evidence(body, repo, _run_checker(repo, head), swift_changed)
     elif command == "qa":
         if issue:
-            level = qa_level(issue.get("body") or "")
+            issue_body = issue.get("body") or ""
+            level = qa_level(issue_body)
             result.notes.append(f"Manual QA level from the issue: {level}")
-            result.errors += check_owner_qa(body, level, pr["head"]["sha"])
+            result.errors += check_owner_qa(body, level, head, issue_qa_rows(issue_body))
     return result
 
 
