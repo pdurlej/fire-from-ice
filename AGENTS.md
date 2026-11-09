@@ -1,10 +1,10 @@
 # AGENTS.md — Fire (Ice fork) working notes
 
-Entry point for coding agents (Codex, and whoever else). Fire is a fork of
-jordanbaird/Ice, a macOS 26 menu bar manager, repositioned as AI-native (MCP
-server + automations). This file is the fast path; **`HANDOFF.md` has the full
-shipped-history and deep context** — read its top CURRENT STATE first. The dated
-"🧭 RESUME HERE" block is historical context, not current operating truth.
+Entry point for coding agents (Codex, Claude, and whoever else). Fire is a fork
+of jordanbaird/Ice, the macOS menu bar manager, with an MCP server and
+automations on top. This file is the fast path. **`HANDOFF.md`** has the
+current state and pointers; the May–August ship log is archived in
+`docs/history/HANDOFF-2026-05-to-08.md`. The plan is **`ROADMAP.md`**.
 
 - **Repo:** `pdurlej/fire-from-ice` (GitHub). Always `-R pdurlej/fire-from-ice`
   for `gh`. Branch: **`fire/main`** (not `main`). Local: `/Users/pd/Developer/fire`.
@@ -17,21 +17,23 @@ shipped-history and deep context** — read its top CURRENT STATE first. The dat
 
 ## ✅ LIVE NOW / NEXT
 
-**`v0.11.13-fire.10.7.3` (build 1158, release commit `3865907`) is the live,
-notarized build and the newest item on the Sparkle appcast.** It is the release
-spine for 10.8. The Ignition tags and `fire/main` history are reference material,
-not a base to fix forward.
+**`v0.11.13-fire.10.8` "Safe Core" (build 1181) is the live, notarized build:
+GitHub Latest since 2026-08-23 and the newest item on the Sparkle appcast.**
+Its contract was issue #18. The Ignition tags (`v1.0.x`) are reference
+material, not a base to fix forward.
 
-**10.8 Safe Core is an unshipped candidate on `codex/fire-10.8`.** Its public
-contract is issue #18; issues #19–#21 define 10.9–10.11. It must remain a
-prerelease until signed desktop E2E. Do not describe local checks as shipped,
-and do not promote Latest or update the appcast from this note alone.
+**macOS 27 Golden Gate is the primary target.** The owner's daily Mac runs
+macOS 27.2, and there Fire does not hide anything: the menu bar is a single
+`MenuBarAgent` window, so the per-item window approach finds no items and the
+IceBar and Layout pane spin forever (#25). The spike brief is
+`docs/spikes/MACOS27-HIDING-SPIKE.md`; its output will be
+`docs/spikes/MACOS27-HIDING-REPORT.md`, and follow-up issues are cut from that.
+Don't touch hiding internals outside that spike. macOS 14–26 must keep working
+as they do in 10.8.
 
-Sentry showed no 10.7.2 error events at the 2026-07-13 03:09 CEST checkpoint.
-FIRE-Q and FIRE-J are benign modal-menu/dialog App Hangs, but the client-side
-`frame.function` filter did **not** suppress them reliably. It is a best-effort
-noise filter. A plausible, unproven explanation is that the final function names
-become available only after server-side symbolication.
+**Merge policy.** A thread or agent may merge its own PR into `fire/main` once
+CI is green. Releases, tags, GitHub Latest and appcast publishing still need
+the owner. Quality gates for agent PRs: `docs/agent-gates.md` (PR #29).
 
 ## Commands (exact)
 
@@ -102,19 +104,24 @@ accepted only when build, URL, length, and signature match).
    accepts it at developer.apple.com, then `gh run rerun --failed <run-id>` (no
    code change).
 
-## Open issues (`gh issue list -R pdurlej/fire-from-ice`)
+## Open issues (`gh issue list -R pdurlej/fire-from-ice`, 2026-11-09)
 
-| # | P | needs | note |
-|---|---|---|---|
-| 7 | P2 | design | `isMouseInsideMenuBarItem` live SLS. Do NOT cache (see gotcha #2). If it ever hangs, make the QUERY cheaper. Never fired an App-Hang. |
-| 5 | P2 | 10.8 runtime | Deadline is in the local 10.8 candidate without holding the session lock. Still needs kill-STOP signed testing before closure. |
-| 11 | P3 | some runtime | remaining LIGHT single main-thread SLS calls (SearchPanel view body, IceBar getOrigin, AppState publisher). |
-| 13 | P3 | VoiceOver | a11y labels on fork-added UI. |
-| 18 | P1 | 10.8 | Safe Core release contract and promotion gate. |
-| 19–21 | roadmap | later | Codex+Claude glance, optional Fireline, then accessibility/polish. |
+| # | P | note |
+|---|---|---|
+| 25 | P0 | Hiding broken on macOS 27. Owned by the spike (see above). |
+| 31–36 | P0 | Docs truth pass: README, AGENTS, HANDOFF, ROADMAP, archive. |
+| 32 | P0 | "Not supported on macOS 27 yet" instead of an endless spinner. |
+| 37 | P0 | Owner's 10-minute smoke test on macOS 27.2. |
+| 38–44 | P1 | Polish for 27: product name (owner decides), own icon clicks, Xcode 27 SDK CI job, onboarding copy, Settings pass, README visuals, Appearance/Spacing. |
+| 45–47 | P2 | SwiftLint on all folders, two stale TODOs, Periphery dead-code report. |
+| 5 | P2 | `sendSync` deadline is in place (`XPCSyncDeadline`); close only after a recorded signed kill-STOP test against both XPC services. |
+| 7, 11 | P2/P3 | Main-thread SLS calls, macOS ≤ 26 only. #7: do NOT cache (gotcha #2). |
+| 13 | P3 | a11y labels on fork-added UI. |
+| 18 | done | 10.8 Safe Core shipped; can be closed. |
+| 19–21 | later | 10.9 glance and 10.10 Fireline are parked; #21 is the polish umbrella. |
 
-Shipped from the board so far: #16+#15 (10.4.2), #8+#9 (10.5), #10 (appcast
-script), #6+#4+#14 (10.6), and #17's activation-safe app-menu cache plus signed
-MCP verification (#4) in 10.7.2. The #7 item-frame cache shipped in 10.7 and was
-reverted in 10.7.1. The App-Hang franchise (FIRE-F/G/H/K/M/N/P) is field-quiet;
-FIRE-Q/J are false modal ANRs that the current filter catches only best-effort.
+Open PRs: #28 Experimental switch for AI/MCP/automations, #29 agent gates,
+#30 release-polish audit, #23 and #24 (older Ice Bar / overlay fixes).
+
+The App-Hang franchise (FIRE-F/G/H/K/M/N/P) is field-quiet on ≤ 26; FIRE-Q/J
+are false modal ANRs that the client filter catches only best-effort.
