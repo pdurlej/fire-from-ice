@@ -5,8 +5,8 @@ Fire 10.8 starts from `v0.11.13-fire.10.7.3` on local branch
 `v1.0.21` / `fire/main` for reference and must not be fixed forward wholesale.
 
 Product source of truth is
-`_bmad-output/planning-artifacts/prd.md`; architectural ownership is in
-`_bmad-output/planning-artifacts/architecture.md`. Historical release details
+`docs/history/_bmad-output/planning-artifacts/prd.md`; architectural ownership is in
+`docs/history/_bmad-output/planning-artifacts/architecture.md`. Historical release details
 remain data in `HANDOFF.md` and `docs/FIRE-1.0-IGNITION.md`, not current rollout
 authority.
 

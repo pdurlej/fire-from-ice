@@ -1586,8 +1586,8 @@ non-destructive.
   separate `pdurlej/fire-releases` repo. Sparkle EdDSA public key in
   `Ice/Resources/Info.plist:SUPublicEDKey` = `JQ+doXtLQyWmGDao7dTzF4dNgnkSmAWmN66Ee/lw9Yc=`. Private key lives only in
   the owner's macOS Keychain.
-- Phase plan in `FORK.md` and `ROADMAP.md` at repo root. Rebrand plan (Ice → Fire) in `docs/REBRAND_PLAN.md`.
-  Icon brief in `docs/ICON_BRIEF.md`.
+- Phase plan in `FORK.md` and `ROADMAP.md` at repo root. Rebrand plan (Ice → Fire) in `docs/history/REBRAND_PLAN.md`.
+  Icon brief in `docs/history/ICON_BRIEF.md`.
 
 ### 2. Fire — signed builds (SHIPPED at fire.4)
 
