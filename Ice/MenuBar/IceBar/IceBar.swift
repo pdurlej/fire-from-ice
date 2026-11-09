@@ -362,12 +362,17 @@ private struct IceBarContentView: View {
             Text("Ice cannot display menu bar items for automatically hidden menu bars")
                 .padding(.horizontal, 10)
         } else if itemManager.itemCache.managedItems.isEmpty {
-            HStack {
-                Text("Loading menu bar items…")
-                ProgressView()
-                    .controlSize(.small)
+            if MenuBarPlatformSupport.isItemDiscoverySupportedOnCurrentSystem {
+                HStack {
+                    Text("Loading menu bar items…")
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                .padding(.horizontal, 10)
+            } else {
+                MenuBarItemsUnsupportedNotice(style: .compact)
+                    .padding(.horizontal, 10)
             }
-            .padding(.horizontal, 10)
         } else if imageCache.cacheFailed(for: section) {
             Text("Unable to display menu bar items")
                 .padding(.horizontal, 10)
