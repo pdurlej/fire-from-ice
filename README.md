@@ -1,8 +1,11 @@
 <div align="center">
     <img src="Resources/Banner.png" alt="Fire from Ice - ice cube with inner flame on a blue-to-ember gradient">
     <h1>Fire from Ice 🔥🧊</h1>
-    <p><em>AI-native maintained fork of <a href="https://github.com/jordanbaird/Ice">jordanbaird/Ice</a> - macOS 26 Tahoe support, signed/notarized DMGs, and an embedded MCP server so AI assistants can read your menu bar</em></p>
+    <p><em>AI-native maintained fork of <a href="https://github.com/jordanbaird/Ice">jordanbaird/Ice</a> - macOS 14–26 support (macOS 27 in progress), signed/notarized DMGs, and an embedded MCP server so AI assistants can read your menu bar</em></p>
 </div>
+
+> [!WARNING]
+> **macOS 27 Golden Gate:** hiding menu bar items does not work yet. Work in progress, see [#25](https://github.com/pdurlej/fire-from-ice/issues/25) and [`docs/spikes/MACOS27-HIDING-SPIKE.md`](docs/spikes/MACOS27-HIDING-SPIKE.md).
 
 > [!IMPORTANT]
 > Upstream Ice received its last code commit on **2025-06-06** and its last stable release (`0.11.12`) predates macOS Sequoia and Tahoe. Multiple Tahoe-only bugs are reported but unaddressed upstream - most visibly the **menu bar items not loading** regression (upstream issues [#744](https://github.com/jordanbaird/Ice/issues/744), [#891](https://github.com/jordanbaird/Ice/issues/891), [#913](https://github.com/jordanbaird/Ice/issues/913); ~80 reactions combined). This fork ships those fixes as proper signed, notarized DMG releases.
@@ -13,7 +16,7 @@
 
 Multiple maintained forks of Ice exist - that's healthy for the ecosystem.
 
-- **[stonerl/Thaw](https://github.com/stonerl/Thaw)** is the established maintenance fork. 6,000+ stars, active release cadence, pure focus on Tahoe stability. **Pick Thaw** if you want a drop-in replacement with no AI surface area.
+- **[stonerl/Thaw](https://github.com/stonerl/Thaw)** is the established maintenance fork of Ice, with no AI features.
 - **Fire (this repo)** is an *AI-native* fork. The differentiator is the embedded MCP server (Model Context Protocol) - AI assistants like Claude, Cursor, and Codex can read and (in fire.7+) modify your menu bar layout. **Pick Fire** if you want to experiment with AI-assisted menu bar management.
 - **upstream [jordanbaird/Ice](https://github.com/jordanbaird/Ice)** remains the canonical project - both Thaw and Fire honor that. Bugs found in either fork that exist upstream should be filed upstream first.
 
@@ -24,7 +27,7 @@ Ice is a powerful menu bar management tool for macOS. While its primary function
 ![Banner](https://github.com/user-attachments/assets/4423085c-4e4b-4f3d-ad0f-90a217c03470)
 
 [![Download](https://img.shields.io/github/v/release/pdurlej/fire-from-ice?label=Download%20latest%20DMG&style=flat-square&color=brightgreen)](https://github.com/pdurlej/fire-from-ice/releases/latest)
-![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue?style=flat-square)
+![Platform](https://img.shields.io/badge/platform-macOS%2014%E2%80%9326%20(27%20in%20progress)-blue?style=flat-square)
 ![Signed](https://img.shields.io/badge/Developer%20ID-signed%20%2B%20notarized-success?style=flat-square)
 [![License](https://img.shields.io/github/license/pdurlej/fire-from-ice?style=flat-square)](LICENSE)
 
@@ -49,10 +52,10 @@ The DMG is **signed** with `Developer ID Application: Piotr Durlej (R47JTHX25P)`
 ### Verify the download (optional)
 
 ```sh
-shasum -a 256 Ice-v0.11.13-fire.4.dmg
-# expected: 231cbd038fb41242d7a298cdb7d46ac5f0f7c8a05ccef633668a13147a4b0e09
+shasum -a 256 Ice-v0.11.13-fire.X.dmg
+# compare with the sha256 shown next to the DMG on its GitHub release page
 
-spctl -avv --type install Ice-v0.11.13-fire.4.dmg
+spctl -a -vv -t install Ice-v0.11.13-fire.X.dmg
 # expected: accepted, source=Notarized Developer ID, origin=Developer ID Application: Piotr Durlej (R47JTHX25P)
 ```
 
@@ -72,15 +75,13 @@ All subsequent Fire updates (`fire.5+`, signed under the same Team ID) preserve 
 
 ## Auto-updates (Sparkle)
 
-Fire ships with **Sparkle 2.9.2** wired to a custom appcast at <https://pdurlej.github.io/fire-releases/appcast.xml>. After installing Ice, **Check for Updates** (Ice menu → Check for Updates) will auto-discover new Fire releases.
+Fire ships with **Sparkle 2.8.0** wired to a custom appcast at <https://pdurlej.github.io/fire-releases/appcast.xml>. After installing Ice, **Check for Updates** (Ice menu → Check for Updates) will auto-discover new Fire releases.
 
 The appcast is signed with **EdDSA** - the public key is embedded in the app's `Info.plist` (`SUPublicEDKey`), and the matching private key lives only in the maintainer's macOS Keychain. A network attacker who tampers with the GitHub Pages feed cannot inject a malicious update.
 
 ## Bundle ID & upstream compatibility
 
 This fork keeps the upstream bundle ID `com.jordanbaird.Ice`, so it is a **drop-in replacement** for upstream Ice. Your existing Ice settings (`~/Library/Preferences/com.jordanbaird.Ice.plist`), hotkeys, and menu bar layout persist on upgrade.
-
-When Fire moves to Phase 4 of the [roadmap](FORK.md#phasing) (proper "Fire" rebrand with a new bundle ID and icon), a first-launch migration will copy your settings across so no state is lost.
 
 ## Building from source
 
@@ -149,13 +150,13 @@ This is a Fire-fork-specific addition; upstream Ice has no crash reporting becau
 - [x] Show/hide section divider icons
 - [x] Toggle application menus
 
-See [ROADMAP.md](ROADMAP.md) for fork-specific planned features (profiles, layout import/export, sensible defaults for new-icon placement, per-display configuration). Trigger conditions shipped in fire.10 as [AI-Native Automations](docs/mcp/CLIENT-SETUP.md).
+See [ROADMAP.md](ROADMAP.md) for what is being worked on now and what is parked. Trigger conditions shipped in fire.10 as [AI-Native Automations](docs/mcp/CLIENT-SETUP.md).
 
 ## Contributing
 
 - **Bugs specific to this fork** (not present in upstream Ice `0.11.12`): file in [this repo's Issues](https://github.com/pdurlej/fire-from-ice/issues).
 - **Bugs present in upstream too**: please file [upstream](https://github.com/jordanbaird/Ice/issues) first so they show in the canonical tracker. Cross-link from this repo if relevant.
-- **Pull requests**: open against `fire/main`. Both `lint.yml` (SwiftLint, runs on every push touching `**/*.swift`) and `build-dmg.yml` (full signed+notarized build, runs on tag push `v*`) must stay green.
+- **Pull requests**: open against `fire/main`. `verify.yml` (build, tests, runs on every PR), `lint.yml` (SwiftLint, runs on every push touching `**/*.swift`) and `build-dmg.yml` (full signed+notarized build, runs on tag push `v*`) must all stay green.
 
 ## Credits
 

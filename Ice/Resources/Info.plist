@@ -8,10 +8,10 @@
 	  Feed XML is served from a separate dedicated repository
 	  (pdurlej/fire-releases) via GitHub Pages so that the source
 	  repository (pdurlej/fire-from-ice) does not need to host static XML on a
-	  branch. Each tagged release on this repository is signed with the
-	  matching EdDSA private key — kept exclusively in the maintainer's
-	  Keychain and in the SPARKLE_PRIVATE_KEY GitHub Actions secret —
-	  and an <item> entry is appended to the feed.
+	  branch. Each release's appcast entry is signed locally by the
+	  maintainer with the matching EdDSA private key, which lives only in
+	  the maintainer's macOS Keychain. Signing never happens in CI and
+	  the key is not stored in any GitHub secret.
 
 	  Replacing either of these values silently routes users to the
 	  wrong update feed or breaks signature verification on every
