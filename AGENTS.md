@@ -60,6 +60,9 @@ accepted only when build, URL, length, and signature match).
 
 ## Hard rules
 
+- **Agent-written PRs follow `docs/agent-gates.md`** (gates G1–G10: build,
+  tests, lint, issue scope, protected files, evidence in the PR body, owner QA).
+  Issues for agents use the "Agent task" template.
 - **Do NOT tell the owner to rest / sleep / wrap up** (a documented Opus tic;
   applies to everyone).
 - **Owner handles all secrets/tokens/agreements personally.** Never enter API

@@ -135,6 +135,11 @@ Apple items other than through the `0...8` allowlist.
 
 ## Quality gates (the PR is not done until all pass)
 
+These are gates G1, G2, G3 and G5 of the shared contract in
+`docs/agent-gates.md`, plus this spike's own QA table, which goes into the PR
+as the issue-specific rows (`Q1`–`Q12`). The protected-files rule (G7) there
+matches "No signing or release changes" above.
+
 Run these from `AGENTS.md`, exactly as written there, and paste the tail of each
 output into the PR:
 

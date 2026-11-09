@@ -1,0 +1,54 @@
+name: Agent gates
+
+# Mechanical half of docs/agent-gates.md. Builds, tests and lint run in
+# verify.yml and lint.yml; this workflow checks what those can't: protected
+# paths, issue scope, evidence in the PR body, and the owner's manual QA.
+# The PR body is untrusted input: it is only ever parsed by
+# scripts/agent_gates.py, never interpolated into a shell command.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  safety:
+    name: "Gates: scope and protected paths"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # SHA-pinned (tag kept as a trailing comment), same as the other workflows.
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+      - run: python3 scripts/agent_gates.py safety
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  evidence:
+    name: "Gates: evidence in PR body"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - run: python3 scripts/agent_gates.py evidence
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  owner-qa:
+    name: "Gates: owner QA"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - run: python3 scripts/agent_gates.py qa
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

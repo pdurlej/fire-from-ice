@@ -1,0 +1,86 @@
+name: Agent task
+description: A self-contained task for a coding agent, executed under docs/agent-gates.md
+title: "[Agent]: <task title>"
+labels: agent-task
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This issue is executed by a coding agent under the shared contract in
+        [`docs/agent-gates.md`](https://github.com/pdurlej/fire-from-ice/blob/fire/main/docs/agent-gates.md).
+        The PR must say `Closes #<this issue>`. CI then checks that every changed file
+        matches **Allowed paths**, that no protected file is touched, that the PR body
+        carries evidence for gates G1–G5, and that the owner's manual QA passed.
+        Keep the headings below unchanged: CI parses them.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: One or two sentences. What is true when this is done?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why this matters, links, and the files to read first. Name the exact types and functions where you can.
+    validations:
+      required: true
+  - type: textarea
+    id: allowed-paths
+    attributes:
+      label: Allowed paths
+      description: |
+        One glob per line. `**` crosses directories, `*` doesn't, a trailing `/` means the whole directory.
+        Include the test files. Anything else the PR touches fails CI.
+      render: text
+      placeholder: |
+        Ice/MenuBar/Hiding/**
+        FireLogic/Sources/FireLogic/Allowlist.swift
+        FireLogic/Tests/FireLogicTests/AllowlistTests.swift
+    validations:
+      required: true
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: Tempting changes the agent must not make, and follow-ups to list in the PR instead.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: A checklist the reviewer can tick from the PR alone. Include the new tests by name.
+      placeholder: |
+        - [ ] ...
+        - [ ] New FireLogic tests cover ...
+    validations:
+      required: true
+  - type: dropdown
+    id: manual-qa
+    attributes:
+      label: Manual QA
+      description: What the owner runs on his Mac before merge (see "Manual QA" in docs/agent-gates.md).
+      options:
+        - smoke (standard smoke checklist S1–S7)
+        - smoke + issue rows (S1–S7 plus the Q rows below)
+        - none (no runtime change; docs, tests, FireLogic-only or CI)
+    validations:
+      required: true
+  - type: textarea
+    id: qa-rows
+    attributes:
+      label: Issue QA rows
+      description: Only for "smoke + issue rows". Copy these into the PR's Manual QA table.
+      placeholder: |
+        | Q1 | Assign one app to Hidden, click the Fire icon | The app's icon disappears |
+  - type: dropdown
+    id: model
+    attributes:
+      label: Model size
+      options:
+        - small model
+        - strong model
+    validations:
+      required: true
