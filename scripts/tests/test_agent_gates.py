@@ -134,7 +134,8 @@ class ProtectedTests(unittest.TestCase):
     def test_gate_files_protected_except_bootstrap(self):
         self.assertTrue(self.check(["scripts/agent_gates.py"]))
         self.assertFalse(self.check(["scripts/agent_gates.py"], bootstrap=True))
-        self.assertTrue(self.check([".github/workflows/agent-gates.yml"], bootstrap=True))
+        self.assertFalse(self.check([".github/workflows/agent-gates.yml"], bootstrap=True))
+        self.assertTrue(self.check([".github/workflows/verify.yml"], bootstrap=True))
 
     def test_pbxproj_version_bump(self):
         diff = (

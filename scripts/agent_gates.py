@@ -52,6 +52,7 @@ PROTECTED_FILES: list[tuple[str, str]] = [
 # Files that implement the gates. They are protected like the rest, except on
 # the bootstrap PR that introduces them (the base branch has no gate script).
 GATE_FILES: list[str] = [
+    ".github/workflows/agent-gates.yml",
     "scripts/agent_gates.py",
     "scripts/tests/test_agent_gates.py",
     "docs/agent-gates.md",
@@ -87,11 +88,11 @@ class Result:
 
 
 def protected_file_reason(path: str, bootstrap: bool) -> Optional[str]:
+    if path in GATE_FILES:
+        return None if bootstrap else "quality-gate implementation"
     for pattern, reason in PROTECTED_FILES:
         if re.search(pattern, path):
             return reason
-    if path in GATE_FILES and not bootstrap:
-        return "quality-gate implementation"
     return None
 
 
