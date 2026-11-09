@@ -93,7 +93,7 @@ and [Blake Crosley](https://blakecrosley.com/blog/macos-27-release-notes). Treat
 |---|---|---|---|
 | 25 | App breaks on macOS 27.0 | **Keep open.** Comment with a link to the spike brief and say what P0-2 changes | This is the real 27 bug. Close it when after-spike discovery lands |
 | 18 | [Release 10.8] Safe Core | **Close as completed** | 10.8 shipped and is GitHub Latest (2026-08-23). Piotr confirms the appcast has it |
-| 5 | sendSync has no timeout | **Close as completed**, or after one 2-minute kill-STOP check | All three `sendSync` sites go through `XPCSyncDeadline` (Shared/Utilities, used by MCPRelayPump, MenuBarItemServiceConnection, Bridge) |
+| 5 | sendSync has no timeout | **Close only after a recorded signed kill-STOP test** (AGENTS.md and `docs/mcp/ARCHITECTURE.md` require it, against both XPC services) | The code is in place: all three `sendSync` sites go through `XPCSyncDeadline` (MCPRelayPump, MenuBarItemServiceConnection, Bridge). Helper coverage alone does not prove cancellation and recovery |
 | 19 | [Release 10.9] Codex + Claude glance | **Close as not planned**, or add a `parked` label | Contradicts the current direction (no new feature waves; AI behind Experimental) |
 | 20 | [Release 10.10] Fireline | **Close as not planned**, or `parked` | Same reason |
 | 21 | [Release 10.11] a11y + settings polish | **Keep, rewrite as an umbrella** for P1 below | Its scope (naming, stale wording, settings layers, a11y) is exactly the polish work. The "two layers" part overlaps with the Experimental thread |
@@ -314,7 +314,7 @@ build, all-target `xcodebuild` and SwiftLint all green.
 **P1-8. Release-page hygiene**
 
 - **Labels:** `owner` (outward-facing).
-- **Change:** mark `v1.0.14`–`v1.0.16` pre-release, or prefix their notes with "Superseded by 0.11.13-fire.10.8". Close #18 and #5, and park #19 and #20, per section 2.
+- **Change:** mark `v1.0.14`–`v1.0.16` pre-release, or prefix their notes with "Superseded by 0.11.13-fire.10.8". Close #18 and park #19 and #20, per section 2. Close #5 only after the signed kill-STOP result is recorded in the issue.
 - **Acceptance:** the Releases page shows 10.8 as the only non-pre-release after it.
 
 ### P2: hygiene (any time, low risk)
