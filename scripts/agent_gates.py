@@ -20,7 +20,7 @@ An "agent PR" is a PR whose body says `Closes #N` (or Fixes/Resolves) for an
 issue labelled `agent-task` or written from the agent-task template.
 
 Stdlib only. The pure functions are unit-tested in
-scripts/tests/test_agent_gates.py; main() does the I/O (event file, git, API).
+scripts/tests/test_agent_gates.py; main() does the I/O (GitHub API via the gh CLI).
 """
 
 from __future__ import annotations
@@ -208,7 +208,7 @@ def _strip_comments(text: str) -> str:
 def markdown_sections(body: str, level: int) -> dict[str, str]:
     """Split markdown on headings of exactly `level` (#, ##, ###)."""
     sections: dict[str, str] = {}
-    heading = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
+    heading = re.compile(r"^(#{1,6})\s+(\S.*)$")
     current: Optional[str] = None
     buffer: list[str] = []
     for line in _strip_comments(body or "").splitlines():
@@ -216,7 +216,8 @@ def markdown_sections(body: str, level: int) -> dict[str, str]:
         if match and len(match.group(1)) <= level:
             if current is not None:
                 sections[current] = "\n".join(buffer).strip()
-            current = match.group(2).strip().lower() if len(match.group(1)) == level else None
+            title = match.group(2).strip().rstrip("#").strip().lower()
+            current = title if len(match.group(1)) == level else None
             buffer = []
         elif current is not None:
             buffer.append(line)
@@ -314,8 +315,9 @@ GATES: list[tuple[str, str, re.Pattern[str]]] = [
 
 
 # The CI workflow whose green run may stand in for local output.
-GATE_WORKFLOWS = {"G1": "Verify macOS", "G2": "Verify macOS", "G3": "Verify macOS",
-                  "G4": "Verify macOS", "G5": "Lint Swift Files"}
+VERIFY_WORKFLOW = "Verify macOS"
+GATE_WORKFLOWS = {"G1": VERIFY_WORKFLOW, "G2": VERIFY_WORKFLOW, "G3": VERIFY_WORKFLOW,
+                  "G4": VERIFY_WORKFLOW, "G5": "Lint Swift Files"}
 NO_SWIFT_RE = re.compile(r"\bno swift (?:files? )?chang", re.IGNORECASE)
 
 
@@ -499,10 +501,11 @@ def find_agent_issue(repo: str, pr_body: str, result: Result) -> Optional[dict]:
 
 
 def run(command: str) -> Result:
-    with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as handle:
-        event = json.load(handle)
-    pr = event["pull_request"]
+    # Only the PR number comes from the workflow (as an integer); everything
+    # else about the PR is read from the API, so no event-file content ever
+    # reaches a command line.
     repo = _require(REPO_RE, os.environ["GITHUB_REPOSITORY"], "repository")
+    pr = _gh_json(f"repos/{repo}/pulls/{int(os.environ['PR_NUMBER'])}")
     body = pr.get("body") or ""
     labels = {label["name"] for label in pr.get("labels", [])}
     result = Result()
