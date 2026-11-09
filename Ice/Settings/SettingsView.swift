@@ -53,6 +53,21 @@ struct SettingsView: View {
         appearsActive ? .primary : .secondary
     }
 
+    private var experimentalFeaturesEnabled: Bool {
+        appState.settings.advanced.experimentalFeaturesEnabled
+    }
+
+    /// Sidebar entries. Experimental-only panes appear only while the
+    /// Experimental switch is on.
+    private var visibleIdentifiers: [SettingsNavigationIdentifier] {
+        SettingsNavigationIdentifier.allCases.filter { identifier in
+            !identifier.requiresExperimentalFeatures
+                || FireFeaturePolicy.isExperimentalPaneVisible(
+                    experimentalFeaturesEnabled: experimentalFeaturesEnabled
+                )
+        }
+    }
+
     private var navigationTitle: LocalizedStringKey {
         navigationState.settingsNavigationIdentifier.localized
     }
@@ -64,13 +79,19 @@ struct SettingsView: View {
             detailView
         }
         .navigationTitle(navigationTitle)
+        .onChange(of: experimentalFeaturesEnabled) { _, enabled in
+            // Don't leave the user on a pane that just disappeared.
+            if !enabled, navigationState.settingsNavigationIdentifier.requiresExperimentalFeatures {
+                navigationState.settingsNavigationIdentifier = .advanced
+            }
+        }
     }
 
     @ViewBuilder
     private var sidebar: some View {
         List(selection: $navigationState.settingsNavigationIdentifier) {
             Section {
-                ForEach(SettingsNavigationIdentifier.allCases) { identifier in
+                ForEach(visibleIdentifiers) { identifier in
                     sidebarItem(for: identifier)
                 }
             } header: {
@@ -138,7 +159,11 @@ struct SettingsView: View {
         case .hotkeys:
             HotkeysSettingsPane(settings: appState.settings.hotkeys)
         case .automations:
-            AutomationsSettingsPane()
+            if experimentalFeaturesEnabled {
+                AutomationsSettingsPane()
+            } else {
+                AdvancedSettingsPane(settings: appState.settings.advanced)
+            }
         case .advanced:
             AdvancedSettingsPane(settings: appState.settings.advanced)
         case .about:

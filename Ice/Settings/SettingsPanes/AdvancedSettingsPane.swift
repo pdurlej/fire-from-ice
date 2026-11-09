@@ -42,17 +42,17 @@ struct AdvancedSettingsPane: View {
             IceSection("Privacy & Diagnostics") {
                 shareDiagnostics
             }
-            IceSection("Contexts & Agents") {
-                contextsAndAgentsEnabled
+            IceSection("Experimental") {
+                experimentalFeaturesEnabled
             }
-            if settings.contextsAndAgentsEnabled {
-                IceSection("MCP Server (experimental)") {
+            if settings.experimentalFeaturesEnabled {
+                IceSection("MCP Server") {
                     mcpServerDescription
                     mcpServerEnabled
                     mcpAllowWrites
                     mcpNotifyOnWrite
                 }
-                IceSection("AI Quotas (experimental)") {
+                IceSection("AI Quotas") {
                     AIQuotaSettingsContent(settings: appState.aiQuotaManager.settings)
                 }
             }
@@ -60,14 +60,19 @@ struct AdvancedSettingsPane: View {
     }
 
     @ViewBuilder
-    private var contextsAndAgentsEnabled: some View {
+    private var experimentalFeaturesEnabled: some View {
         Toggle(
-            "Enable Contexts & Agents",
-            isOn: $settings.contextsAndAgentsEnabled
+            "Enable experimental features",
+            isOn: $settings.experimentalFeaturesEnabled
         )
         .annotation {
             Text(
-                "Optional local AI features. When off, Fire runs only its menu bar manager and does not start MCP, triggers, or quota polling."
+                """
+                AI quotas, the MCP server for AI assistants, and automations. \
+                These are still in development. When off, Fire is only a menu bar \
+                manager: none of them run in the background and their settings are \
+                hidden. Your existing configuration is kept. Default: off.
+                """
             )
             .padding(.trailing, 75)
         }

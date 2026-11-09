@@ -5,7 +5,8 @@ Fire exposes a Model Context Protocol (MCP) server so AI assistants can read and
 ## Prerequisites
 
 - Ice.app installed in `/Applications` (the bundle name stays `Ice.app`; the user-facing brand is "Fire from Ice")
-- Settings → Advanced → "Enable MCP server" toggled ON
+- Settings → Advanced → Experimental → "Enable experimental features" toggled ON
+- Settings → Advanced → MCP Server → "Enable MCP server" toggled ON (this section appears only once experimental features are on)
 - (For write operations) "Allow write operations" toggled ON
 - macOS 26 or later
 
@@ -95,6 +96,6 @@ Fire processes all MCP requests locally. No menu bar state, bundle IDs, or layou
 If the tools don't appear in your client after configuration:
 
 1. Verify Ice.app is installed at `/Applications/Ice.app` (`ls /Applications/Ice.app/Contents/MacOS/IceMCPBridge` should return the binary).
-2. Verify Settings → Advanced → "Enable MCP server" is ON.
+2. Verify Settings → Advanced → "Enable experimental features" and "Enable MCP server" are both ON.
 3. Restart your MCP client.
 4. Check your client's MCP logs (Claude Desktop logs are in `~/Library/Logs/Claude/`).

@@ -13,6 +13,12 @@ enum SettingsNavigationIdentifier: String, NavigationIdentifier {
     case advanced = "Advanced"
     case about = "About"
 
+    /// Whether this pane exists only for experimental features and is hidden
+    /// while Settings > Advanced > Experimental is off.
+    var requiresExperimentalFeatures: Bool {
+        self == .automations
+    }
+
     var iconResource: IconResource {
         switch self {
         case .general: .systemSymbol("gearshape")

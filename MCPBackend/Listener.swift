@@ -203,9 +203,10 @@ final class Listener {
     /// user intent. Only requests that passed `isAgentFacing` reach here.
     private static func policyDenial(for request: MenuBarItemService.Request) -> String? {
         let suite = UserDefaults(suiteName: "com.jordanbaird.Ice")
-        let contextsAndAgentsEnabled = suite?.bool(forKey: "ContextsAndAgentsEnabled") ?? false
-        guard contextsAndAgentsEnabled else {
-            return "Fire's Contexts & Agents are turned off. Enable them in Fire → Settings → Advanced."
+        // Settings > Advanced > Experimental (key name predates the rename).
+        let experimentalFeaturesEnabled = suite?.bool(forKey: "ContextsAndAgentsEnabled") ?? false
+        guard experimentalFeaturesEnabled else {
+            return "Fire's experimental features are turned off. Turn on \"Enable experimental features\" in Fire → Settings → Advanced → Experimental."
         }
         let serverEnabled = suite?.bool(forKey: "MCPServerEnabled") ?? false
         guard serverEnabled else {

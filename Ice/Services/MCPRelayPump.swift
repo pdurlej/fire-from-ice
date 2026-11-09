@@ -172,8 +172,8 @@ final class MCPRelayPump {
     /// two never disagree. A write needs both the server enabled AND writes
     /// allowed; returns a user-facing refusal reason, or `nil` to proceed.
     private static func writeDenialReason() -> String? {
-        guard Defaults.bool(forKey: .contextsAndAgentsEnabled) else {
-            return "Fire's Contexts & Agents are turned off."
+        guard Defaults.bool(forKey: .experimentalFeaturesEnabled) else {
+            return "Fire's experimental features are turned off."
         }
         guard Defaults.bool(forKey: .mcpServerEnabled) else {
             return "Fire's MCP server is turned off."
