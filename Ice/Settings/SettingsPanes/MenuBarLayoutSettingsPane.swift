@@ -52,7 +52,13 @@ struct MenuBarLayoutSettingsPane: View {
         .allowsHitTesting(hasItems)
         .overlay {
             if !hasItems {
-                loadingMenuBarItems
+                if MenuBarPlatformSupport.isItemDiscoverySupportedOnCurrentSystem {
+                    loadingMenuBarItems
+                } else {
+                    MenuBarItemsUnsupportedNotice(style: .large)
+                        .font(.title2)
+                        .padding(20)
+                }
             }
         }
     }

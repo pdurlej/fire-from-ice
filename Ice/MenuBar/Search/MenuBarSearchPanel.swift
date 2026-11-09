@@ -254,7 +254,7 @@ private struct MenuBarSearchContentView: View {
             SectionedList(selection: $model.selection, items: $model.displayedItems)
                 .contentPadding(8)
                 .scrollContentBackground(.hidden)
-        } else {
+        } else if MenuBarPlatformSupport.isItemDiscoverySupportedOnCurrentSystem {
             VStack {
                 Text("Loading menu bar items…")
                     .font(.title2)
@@ -262,6 +262,11 @@ private struct MenuBarSearchContentView: View {
                     .controlSize(.small)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            MenuBarItemsUnsupportedNotice(style: .large)
+                .font(.title2)
+                .padding(20)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
