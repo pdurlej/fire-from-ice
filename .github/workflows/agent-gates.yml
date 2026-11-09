@@ -14,14 +14,16 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-  issues: read
-  pull-requests: read
+# No workflow-level token scopes; each job asks for read-only access below.
+permissions: {}
 
 jobs:
   safety:
     name: "Gates: scope and protected paths"
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -29,26 +31,39 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0
+          persist-credentials: false
       - run: python3 scripts/agent_gates.py safety
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
   evidence:
     name: "Gates: evidence in PR body"
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
       - run: python3 scripts/agent_gates.py evidence
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
   owner-qa:
     name: "Gates: owner QA"
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
       - run: python3 scripts/agent_gates.py qa
         env:
           GITHUB_TOKEN: ${{ github.token }}
