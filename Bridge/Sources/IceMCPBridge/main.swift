@@ -330,7 +330,7 @@ private func bridgePolicyDenial(for toolName: String) -> String? {
         ? UserDefaults.standard
         : UserDefaults(suiteName: hostBundleID)
     guard suite?.bool(forKey: "ContextsAndAgentsEnabled") == true else {
-        return "Fire's Contexts & Agents are turned off. Enable them in Fire → Settings → Advanced."
+        return "Fire's experimental features are turned off. Turn on \"Enable experimental features\" in Fire → Settings → Advanced → Experimental."
     }
     guard suite?.bool(forKey: "MCPServerEnabled") == true else {
         return "Fire's MCP server is turned off. Turn it on in Fire → Settings → Advanced → MCP Server."

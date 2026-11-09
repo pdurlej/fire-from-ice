@@ -76,13 +76,6 @@ struct AutomationsSettingsPane: View {
             .fixedSize(horizontal: false, vertical: true)
             .padding(.trailing, 75)
 
-            if !appState.settings.advanced.contextsAndAgentsEnabled {
-                CalloutBox(
-                    "Automations are paused while Contexts & Agents is off.",
-                    systemImage: "pause.circle"
-                )
-            }
-
             if hasEnabled {
                 HStack {
                     Spacer()
@@ -103,7 +96,7 @@ struct AutomationsSettingsPane: View {
                     .foregroundStyle(.secondary)
                 Text("No automations yet")
                     .font(.headline)
-                Text(emptyStateGuidance)
+                Text("Ask an AI assistant connected to Fire to set one up, e.g. “when Slack is frontmost, hide my password manager.”")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -111,13 +104,6 @@ struct AutomationsSettingsPane: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
         }
-    }
-
-    private var emptyStateGuidance: String {
-        if appState.settings.advanced.contextsAndAgentsEnabled {
-            return "Ask an AI assistant connected to Fire to set one up, e.g. “when Slack is frontmost, hide my password manager.”"
-        }
-        return "Turn on Contexts & Agents in Advanced settings before creating an automation with an AI assistant."
     }
 
     // MARK: - Rule row

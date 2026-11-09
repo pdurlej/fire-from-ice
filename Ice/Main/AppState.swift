@@ -201,7 +201,7 @@ final class AppState: ObservableObject {
         }
         .store(in: &c)
 
-        settings.advanced.$contextsAndAgentsEnabled
+        settings.advanced.$experimentalFeaturesEnabled
             .removeDuplicates()
             .sink { [weak self] enabled in
                 self?.setOptionalRuntimeEnabled(enabled)
@@ -236,7 +236,7 @@ final class AppState: ObservableObject {
     /// Persisted settings and sealed grants are deliberately left untouched.
     private func setOptionalRuntimeEnabled(_ enabled: Bool) {
         let runtimeState = enabled ? "starting" : "stopping"
-        logger.notice("Optional Contexts & Agents runtime \(runtimeState, privacy: .public)")
+        logger.notice("Experimental features runtime \(runtimeState, privacy: .public)")
         aiQuotaManager.setRuntimeEnabled(enabled)
 
         if enabled {

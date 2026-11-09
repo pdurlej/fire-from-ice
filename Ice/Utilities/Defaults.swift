@@ -166,7 +166,10 @@ extension Defaults {
         case mcpServerEnabled = "MCPServerEnabled"
         case mcpAllowWrites = "MCPAllowWrites"
         case mcpNotifyOnWrite = "MCPNotifyOnWrite"
-        case contextsAndAgentsEnabled = "ContextsAndAgentsEnabled"
+        /// The single Settings > Advanced > Experimental switch. The raw value
+        /// predates the rename and is read by MCPBackend.xpc and the MCP bridge,
+        /// so it must not change.
+        case experimentalFeaturesEnabled = "ContextsAndAgentsEnabled"
         case suppressCompetingManagerWarning = "SuppressCompetingManagerWarning"
 
         // MARK: AI Quotas Settings

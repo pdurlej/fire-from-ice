@@ -21,7 +21,7 @@ MenuBarItemService.xpc (AX/source-PID work)
 - `IceMCPBridge` implements the MCP tools and translates requests to the shared
   `MenuBarItemService.Request` wire types.
 - `MCPBackend.xpc` is the agent-facing listener and authoritative settings gate.
-  It refuses all requests unless **Contexts & Agents** and **MCP Server** are
+  It refuses all requests unless **Experimental** (Settings > Advanced > Experimental) and **MCP Server** are
   enabled. Writes additionally require **Allow write operations**.
 - `MCPRelayPump` in the main app fetches queued consent work. The main app owns
   every Fire-authored approval prompt and performs approved mutations through
@@ -38,7 +38,7 @@ There is no per-client Keychain consent record.
 - Approved automations are sealed with an HMAC key stored in Keychain. The seal
   binds the exact normalized condition and action; changing either invalidates
   the grant and requires approval again.
-- Disabling Contexts & Agents stops the optional runtime but preserves settings,
+- Disabling Experimental stops the optional runtime but preserves settings,
   automation definitions, and sealed grants.
 
 ## Peer authentication

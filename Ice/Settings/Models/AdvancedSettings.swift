@@ -72,9 +72,11 @@ final class AdvancedSettings: ObservableObject {
     /// are `true`.
     @Published var mcpNotifyOnWrite = true
 
-    /// Top-level opt-in for every agent/context runtime. Menu bar management
-    /// stays fully functional while this is off.
-    @Published var contextsAndAgentsEnabled = false
+    /// The single Experimental switch: top-level opt-in for AI quotas, the
+    /// MCP server, and automations. While it is off, Fire is only a menu bar
+    /// manager: none of those features run, and their settings are hidden.
+    /// Their nested configuration is kept so turning it back on restores it.
+    @Published var experimentalFeaturesEnabled = false
 
     /// Storage for internal observers.
     private var cancellables = Set<AnyCancellable>()
@@ -100,13 +102,13 @@ final class AdvancedSettings: ObservableObject {
         Defaults.ifPresent(key: .shareDiagnostics, assign: &shareDiagnostics)
         Defaults.ifPresent(key: .mcpNotifyOnWrite, assign: &mcpNotifyOnWrite)
         let optionalFeatureState = FireFeaturePolicy.initialOptionalFeatureState(
-            storedContextsAndAgentsEnabled: Defaults.object(forKey: .contextsAndAgentsEnabled) as? Bool,
+            storedExperimentalFeaturesEnabled: Defaults.object(forKey: .experimentalFeaturesEnabled) as? Bool,
             storedMCPServerEnabled: Defaults.object(forKey: .mcpServerEnabled) as? Bool,
             storedMCPAllowWrites: Defaults.object(forKey: .mcpAllowWrites) as? Bool,
             legacyAIQuotasEnabled: Defaults.bool(forKey: .enableAIQuotas),
             hasStoredTriggers: UserDefaults.standard.data(forKey: "Triggers") != nil
         )
-        contextsAndAgentsEnabled = optionalFeatureState.contextsAndAgentsEnabled
+        experimentalFeaturesEnabled = optionalFeatureState.experimentalFeaturesEnabled
         mcpServerEnabled = optionalFeatureState.mcpServerEnabled
         mcpAllowWrites = optionalFeatureState.mcpAllowWrites
 
@@ -198,10 +200,10 @@ final class AdvancedSettings: ObservableObject {
             }
             .store(in: &c)
 
-        $contextsAndAgentsEnabled
+        $experimentalFeaturesEnabled
             .receive(on: DispatchQueue.main)
             .sink { enabled in
-                Defaults.set(enabled, forKey: .contextsAndAgentsEnabled)
+                Defaults.set(enabled, forKey: .experimentalFeaturesEnabled)
             }
             .store(in: &c)
 
