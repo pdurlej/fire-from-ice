@@ -69,7 +69,8 @@ Agents never change these. CI fails on any of them:
 - In `Ice.xcodeproj/project.pbxproj`: `MARKETING_VERSION`,
   `CURRENT_PROJECT_VERSION`, `DEVELOPMENT_TEAM`, any `CODE_SIGN*`,
   `PROVISIONING_PROFILE*`, `ENABLE_HARDENED_RUNTIME`,
-  `PRODUCT_BUNDLE_IDENTIFIER`, `OTHER_CODE_SIGN_FLAGS`.
+  `PRODUCT_BUNDLE_IDENTIFIER`, `OTHER_CODE_SIGN_FLAGS`, `INFOPLIST_FILE`,
+  `GENERATE_INFOPLIST_FILE`, any `INFOPLIST_KEY_*`.
 - In any `Info.plist`: `SUFeedURL`, `SUPublicEDKey`, `CFBundleIdentifier`.
 - CI and the gates themselves: everything in `.github/workflows/`,
   `.swiftlint.yml`, `scripts/agent_gates.py` and its test, this file, the PR

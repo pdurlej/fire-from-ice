@@ -149,6 +149,14 @@ class ProtectedTests(unittest.TestCase):
         )
         self.assertEqual(len(self.check([gates.PBXPROJ], diff)), 2)
 
+    def test_pbxproj_generated_info_plist_keys(self):
+        diff = (
+            "--- a/Ice.xcodeproj/project.pbxproj\n+++ b/Ice.xcodeproj/project.pbxproj\n"
+            "+\t\t\t\tINFOPLIST_KEY_SUFeedURL = \"https://evil.invalid/appcast.xml\";\n"
+            "+\t\t\t\tINFOPLIST_FILE = Ice/Other.plist;\n"
+        )
+        self.assertEqual(len(self.check([gates.PBXPROJ], diff)), 2)
+
     def test_pbxproj_other_change_is_fine(self):
         diff = (
             "--- a/Ice.xcodeproj/project.pbxproj\n+++ b/Ice.xcodeproj/project.pbxproj\n"

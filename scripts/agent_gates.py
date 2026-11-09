@@ -68,7 +68,10 @@ PBXPROJ = "Ice.xcodeproj/project.pbxproj"
 PBXPROJ_PROTECTED = re.compile(
     r"\b(MARKETING_VERSION|CURRENT_PROJECT_VERSION|DEVELOPMENT_TEAM|"
     r"CODE_SIGN[A-Z_]*|PROVISIONING_PROFILE[A-Z_]*|ENABLE_HARDENED_RUNTIME|"
-    r"PRODUCT_BUNDLE_IDENTIFIER|OTHER_CODE_SIGN_FLAGS)\b"
+    r"PRODUCT_BUNDLE_IDENTIFIER|OTHER_CODE_SIGN_FLAGS|"
+    # Generated Info.plist keys and the plist location can override the
+    # protected Info.plist values below.
+    r"INFOPLIST_FILE|GENERATE_INFOPLIST_FILE|INFOPLIST_KEY_\w+)\b"
 )
 INFO_PLIST_PROTECTED_KEYS = ("SUFeedURL", "SUPublicEDKey", "CFBundleIdentifier")
 
