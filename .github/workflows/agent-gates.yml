@@ -34,7 +34,7 @@ jobs:
           persist-credentials: false
       - run: python3 scripts/agent_gates.py safety
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
 
   evidence:
     name: "Gates: evidence in PR body"
@@ -50,7 +50,7 @@ jobs:
           persist-credentials: false
       - run: python3 scripts/agent_gates.py evidence
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
 
   owner-qa:
     name: "Gates: owner QA"
@@ -66,4 +66,4 @@ jobs:
           persist-credentials: false
       - run: python3 scripts/agent_gates.py qa
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}

@@ -27,7 +27,6 @@ import plistlib
 import re
 import subprocess
 import sys
-import urllib.request
 from dataclasses import dataclass, field
 from typing import Callable, Iterable, Optional
 
@@ -373,24 +372,30 @@ def _git_bytes(rev: str, path: str) -> Optional[bytes]:
     return proc.stdout if proc.returncode == 0 else None
 
 
-def _api(repo: str, path: str) -> dict:
-    request = urllib.request.Request(
-        f"https://api.github.com/repos/{repo}/{path}",
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
+SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+REPO_RE = re.compile(r"^[\w.-]+/[\w.-]+$")
+
+
+def _require(pattern: re.Pattern[str], value: str, what: str) -> str:
+    if not pattern.fullmatch(value or ""):
+        raise SystemExit(f"Refusing unexpected {what}: {value!r}")
+    return value
+
+
+def _issue(repo: str, number: int) -> dict:
+    """Read an issue with the gh CLI (preinstalled on GitHub runners, uses GH_TOKEN)."""
+    proc = subprocess.run(
+        ["gh", "api", f"repos/{repo}/issues/{int(number)}"],
+        check=True, capture_output=True, text=True, timeout=60,
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return json.load(response)
+    return json.loads(proc.stdout)
 
 
 def find_agent_issue(repo: str, pr_body: str, result: Result) -> Optional[dict]:
     issues = []
     for number in linked_issue_numbers(pr_body):
         try:
-            issue = _api(repo, f"issues/{number}")
+            issue = _issue(repo, number)
         except Exception as error:  # noqa: BLE001 — report and keep going
             result.errors.append(f"Could not read issue #{number}: {error}")
             continue
@@ -408,7 +413,7 @@ def run(command: str) -> Result:
     with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as handle:
         event = json.load(handle)
     pr = event["pull_request"]
-    repo = os.environ["GITHUB_REPOSITORY"]
+    repo = _require(REPO_RE, os.environ["GITHUB_REPOSITORY"], "repository")
     body = pr.get("body") or ""
     labels = {label["name"] for label in pr.get("labels", [])}
     result = Result()
@@ -422,7 +427,8 @@ def run(command: str) -> Result:
         )
 
     if command == "safety":
-        base, head = pr["base"]["sha"], pr["head"]["sha"]
+        base = _require(SHA_RE, pr["base"]["sha"], "base sha")
+        head = _require(SHA_RE, pr["head"]["sha"], "head sha")
         changed = [p for p in _git("diff", "--name-only", "--no-renames", f"{base}...{head}").splitlines() if p]
         diff_lines = parse_unified_diff(_git("diff", "-U0", "--no-renames", f"{base}...{head}"))
         bootstrap = _git_bytes(base, "scripts/agent_gates.py") is None
